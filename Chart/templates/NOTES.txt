@@ -1,0 +1,29 @@
+ssh-gateway has been installed
+
+To get started:
+
+Add a new service account:
+kubectl create sa -n {{ .Release.Namespace }} <username>
+
+and annotate the username with their ssh key:
+kubectl annotate -n {{ .Release.Namespace }} --overwrite sa <username> ssh="ssh-rsa AAAAB3NzaC1yc...."
+
+ssh {{ .Values.username }}@<hostname> -p<exposed port>
+
+This gives instructions to install the "kubectl-ssh" plugin.
+
+To give yourself cluster admin rights:
+cat <<EOF | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-admin-<username>
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: User
+  name: system:serviceaccount:users:<username>
+  apiGroup: rbac.authorization.k8s.io
+EOF
