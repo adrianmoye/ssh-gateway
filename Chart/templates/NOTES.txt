@@ -24,6 +24,6 @@ roleRef:
   name: cluster-admin
 subjects:
 - kind: User
-  name: system:serviceaccount:users:<username>
+  name: system:serviceaccount:{{ .Release.Namespace }}:<username>
   apiGroup: rbac.authorization.k8s.io
 EOF
