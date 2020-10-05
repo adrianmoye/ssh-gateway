@@ -13,6 +13,7 @@ import (
 	"time"
 )
 
+//* just the raw bytes of the certs
 type RawPEM struct {
 	Key  []byte
 	Cert []byte
@@ -84,6 +85,7 @@ func DecodeCert(CA RawPEM) (cert *x509.Certificate, key *rsa.PrivateKey) {
 	return
 }
 
+// pass in the CN of the cert and raw PEM, output the new certs raw PEM
 func SignedCert(CN string, CA RawPEM) (OUT RawPEM) {
 
 	CACert, CAKey := DecodeCert(CA)
@@ -135,15 +137,3 @@ func SignedCert(CN string, CA RawPEM) (OUT RawPEM) {
 
 	return
 }
-
-/*
-func main() {
-	myCA := genCA("CA Name")
-	fmt.Println(string(myCA.Cert))
-	fmt.Println(string(myCA.Key))
-	myCert := SignedCert("kubernetes.default", myCA)
-	fmt.Println(string(myCert.Cert))
-	fmt.Println(string(myCert.Key))
-
-}
-*/

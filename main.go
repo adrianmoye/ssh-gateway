@@ -98,6 +98,6 @@ func main() {
 
 	go https_server(config.ProxyCert)
 
-	sshd_server(config.Port, config.Ssh)
+	SSHServer(config.Port, config.Ssh)
 
 }

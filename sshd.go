@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
-	"golang.org/x/crypto/ssh"
 	"io"
 	"log"
 	"net"
 	"os"
 	"regexp"
-	
+
+	"golang.org/x/crypto/ssh"
 )
 
 var HELP_TEMPLATE = `Kubernetes ssh gateway, to use install the kubectl plugin:
@@ -27,9 +27,7 @@ var HELP_TEMPLATE = `Kubernetes ssh gateway, to use install the kubectl plugin:
   
 `
 
-
-
-func sshd_server(port string, config *ssh.ServerConfig) {
+func SSHServer(port string, config *ssh.ServerConfig) {
 
 	// Listen for the raw tcp connections
 	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", port))
@@ -45,7 +43,7 @@ func sshd_server(port string, config *ssh.ServerConfig) {
 			log.Printf("Failed to accept incoming connection (%s)", err)
 			continue
 		}
-		
+
 		// pass the connection through to the ssh handler
 		go handleSshUpgrade(tcpConn, config)
 	}
@@ -54,7 +52,7 @@ func sshd_server(port string, config *ssh.ServerConfig) {
 func genSshServerConfig(privateBytes []byte) *ssh.ServerConfig {
 
 	config := &ssh.ServerConfig{
-	
+
 		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 
 			if CheckKey(conn.User(), key) {
@@ -117,15 +115,12 @@ func handleChannels(client *ssh.ServerConn, chans <-chan ssh.NewChannel) {
 	}
 }
 
-
-
-
 /*
   This handles all of the direct tcp proxied connections.
   we treat the incomming connections casually, as they can either
   connect to the API server, or not, which should never happen under
   normal usage.
-  */
+*/
 func handleDirectTcpip(sshChan ssh.NewChannel) {
 
 	/* we should unmarshal the payload to get the destination, but we don't care,
@@ -179,7 +174,7 @@ func handleDirectTcpip(sshChan ssh.NewChannel) {
 
 }
 
-/* 
+/*
   This handles all of the normal ssh login and interactive events,
   everything except the tcp forwarding.
   Responsibilities include:
@@ -187,7 +182,7 @@ func handleDirectTcpip(sshChan ssh.NewChannel) {
 	* api token requests
 	* download kubectl plugin
 	* get config for the plugin
- */
+*/
 func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 	connection, requests, err := sshChan.Accept()
 	if err != nil {
@@ -219,7 +214,7 @@ func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 			case "plugin":
 				fmt.Fprintf(connection, "%s", PLUGIN)
 			case "token":
-				fmt.Fprintf(connection, writeAPIToken( GetToken(name)) )
+				fmt.Fprintf(connection, writeAPIToken(GetToken(name)))
 			case "login":
 				if config.OperationMode == "impersonate" {
 					fmt.Fprintf(connection, "%s %s %s %s\n", name, "kubernetes.default:443", "kubernetes.default", config.ProxyCA)
