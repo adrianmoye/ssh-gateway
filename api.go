@@ -7,12 +7,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/crypto/ssh"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	"golang.org/x/crypto/ssh"
 )
 
 type apiConfig struct {
@@ -56,9 +57,9 @@ type ServiceAccountEvent struct {
 }
 
 type GenericHeader struct {
-	ApiVersion string            `json:"apiVersion"`
-	Kind       string            `json:"kind"`
-	Metadata   Metadata          `json:"metadata"`
+	ApiVersion string   `json:"apiVersion"`
+	Kind       string   `json:"kind"`
+	Metadata   Metadata `json:"metadata"`
 }
 
 type APIToken struct {
@@ -182,21 +183,20 @@ func CheckKey(name string, key ssh.PublicKey) bool {
 	var ssh_key string
 
 	if config.OperationMode == "impersonate" {
-		config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+ name, &GenRes)
+		config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
 
 		if t, ok := GenRes.Metadata.Annotations["ssh"]; ok {
 			ssh_key = t
 		}
-	}else {
-		config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+ name, &SA)
+	} else {
+		config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+name, &SA)
 		if t, ok := SA.Metadata.Annotations["ssh"]; ok {
 			ssh_key = t
 		}
 	}
 	// log.Println("request: ","/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+ name)
 
-	
-	if len(ssh_key) >0 {
+	if len(ssh_key) > 0 {
 		pubkey, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(ssh_key))
 		if string(key.Marshal()) == string(pubkey.Marshal()) {
 			//var token []byte

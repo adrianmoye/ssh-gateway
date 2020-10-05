@@ -6,9 +6,10 @@ env GOOS=linux GOARCH=amd64 go build sshd.go
 
 import (
 	"encoding/base64"
-	"golang.org/x/crypto/ssh"
-	"log"
 	"flag"
+	"log"
+
+	"golang.org/x/crypto/ssh"
 )
 
 type gwConfig struct {
@@ -16,9 +17,9 @@ type gwConfig struct {
 	Port          string
 	Ssh           *ssh.ServerConfig
 	ProxyCert     RawPEM
-	ProxyCA	      string
+	ProxyCA       string
 	OperationMode string
-	SecretName	  string
+	SecretName    string
 	ResourceType  string
 }
 

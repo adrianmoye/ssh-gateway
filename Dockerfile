@@ -8,5 +8,5 @@ RUN GOOS=linux go build -a -ldflags "-linkmode external -extldflags -static" -o 
 RUN chmod 755 ssh-gateway
 
 FROM scratch
-COPY --from=0 /go/src/github.com/adrianmoye/ssh-gateway/ssh-gateway /ssh-gateway
+COPY --from=0 /go/src/github.com/adrianmoye/ssh-gateway/ssh-gateway /
 
