@@ -37,7 +37,7 @@ function SSH ()
 {
 	# control path format "ssh-<unique context>_@_<ssh connection details>"
 	ssh \
-	-o "ControlPath=~/.kube/ssh-${CONTEXT}_@_%r@%h:%p" \
+	-o "ControlPath=~/.kube/ssh-%r@%h:%p" \
 	-o "ControlMaster=auto" \
 	-o "ControlPersist=10m" \
 	${@}

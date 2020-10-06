@@ -82,8 +82,7 @@ func setupConfig() {
 		secret.Metadata.Namespace = config.Api.namespace
 		secret.Metadata.Labels = make(map[string]string)
 		config.Api.Post("/api/v1/namespaces/"+config.Api.namespace+"/secrets", &secret)
-		log.Println("PUT SECRET")
-		log.Println(secret)
+		log.Printf("Created secret with keys: [%s]\n", config.SecretName)
 	}
 
 	//temp, _ := base64.StdEncoding.DecodeString(secret.Data["ca_cert"])
