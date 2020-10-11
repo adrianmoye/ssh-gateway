@@ -9,8 +9,10 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// Debug make true to log debug messages
 type Debug bool
 
+// Println a wrapper for log.Println
 func (d Debug) Println(v ...interface{}) {
 	if d {
 		Log.Println(v...)
@@ -19,8 +21,24 @@ func (d Debug) Println(v ...interface{}) {
 
 var debug Debug = false
 
-type SSHNetAddr struct {
+// Addr local sshnet address type
+type Addr struct {
 	addr string
+}
+
+// Conn sshnet Conn type, wraps an ssh connection/channel in a net.Conn compatible interface
+type Conn struct {
+	in            chan []byte
+	out           chan []byte
+	readNextChunk []byte
+	sshConn       *ssh.ServerConn
+	client        ssh.Channel
+
+	reader copyDeadline
+	writer copyDeadline
+
+	localAddr  Addr
+	remoteAddr Addr
 }
 
 type copyDeadline struct {
@@ -65,29 +83,18 @@ func newCopyDeadline() copyDeadline {
 	return c
 }
 
-type SSHNetConn struct {
-	in            chan []byte
-	out           chan []byte
-	readNextChunk []byte
-	sshConn       *ssh.ServerConn
-	client        ssh.Channel
-
-	reader copyDeadline
-	writer copyDeadline
-
-	localAddr  SSHNetAddr
-	remoteAddr SSHNetAddr
-}
-
-func (a SSHNetAddr) Network() string {
-	return "SSHNet"
-}
-
-func (a SSHNetAddr) String() string {
+// Network returns address in compliance with net.Conn interface
+func (a Addr) Network() string {
 	return a.addr
 }
 
-func (c *SSHNetConn) Read(retBuf []byte) (int, error) {
+// String returns address in compliance with net.Conn interface
+func (a Addr) String() string {
+	return a.addr
+}
+
+// Read data in compliance with net.Conn interface
+func (c *Conn) Read(retBuf []byte) (int, error) {
 	debug.Println("Read called retlen:", len(retBuf))
 	//nextZero := []byte{}
 	if c.readNextChunk != nil && len(c.readNextChunk) > 0 {
@@ -103,14 +110,15 @@ func (c *SSHNetConn) Read(retBuf []byte) (int, error) {
 
 			return len(retBuf), nil
 
-		} else {
-			debug.Println("Read called else len(c.readNextChunk) > len(retBuf)", len(retBuf), len(c.readNextChunk))
-			// otherwise just copy the data to the return
-			copy(retBuf, c.readNextChunk)
-			bytesWrittern := len(c.readNextChunk)
-			c.readNextChunk = []byte{}
-			return bytesWrittern, nil
 		}
+
+		debug.Println("Read called else len(c.readNextChunk) > len(retBuf)", len(retBuf), len(c.readNextChunk))
+		// otherwise just copy the data to the return
+		copy(retBuf, c.readNextChunk)
+		bytesWrittern := len(c.readNextChunk)
+		c.readNextChunk = []byte{}
+		return bytesWrittern, nil
+
 	}
 	c.reader.Timeout()
 
@@ -120,7 +128,7 @@ func (c *SSHNetConn) Read(retBuf []byte) (int, error) {
 
 		debug.Println("Read called read status, len:", ok, len(buff))
 		if !ok {
-			debug.Println("Read called notok:", len(buff))
+			debug.Println("Read called not ok:", len(buff))
 			c.reader.Finish()
 			return 0, os.ErrClosed
 
@@ -135,18 +143,14 @@ func (c *SSHNetConn) Read(retBuf []byte) (int, error) {
 			c.reader.Finish()
 			return len(retBuf), nil
 
-		} else {
-			// otherwise just copy the data to the return
-			debug.Println("Read called read2:", len(retBuf))
-			copy(retBuf, buff)
-			c.reader.Finish()
-			return len(buff), nil
 		}
-		//copy(b, buff)
 
-		debug.Println("Read finished bytes: ", len(buff))
+		// otherwise just copy the data to the return
+		debug.Println("Read called read2:", len(retBuf))
+		copy(retBuf, buff)
 		c.reader.Finish()
 		return len(buff), nil
+
 	case <-c.reader.SigTimout:
 
 		debug.Println("Read timeout")
@@ -155,7 +159,8 @@ func (c *SSHNetConn) Read(retBuf []byte) (int, error) {
 	}
 }
 
-func (c *SSHNetConn) Write(b []byte) (int, error) {
+// Write data in compliance with net.Conn interface
+func (c *Conn) Write(b []byte) (int, error) {
 
 	debug.Println("Write called")
 	c.writer.Timeout()
@@ -175,7 +180,8 @@ func (c *SSHNetConn) Write(b []byte) (int, error) {
 	}
 }
 
-func (c *SSHNetConn) Close() error {
+// Close the connection
+func (c *Conn) Close() error {
 
 	debug.Println("Close called")
 	if c.out != nil {
@@ -185,15 +191,18 @@ func (c *SSHNetConn) Close() error {
 	return nil
 }
 
-func (c *SSHNetConn) LocalAddr() net.Addr {
+// LocalAddr in compliance with net.Conn interface
+func (c *Conn) LocalAddr() net.Addr {
 	return c.localAddr
 }
 
-func (c *SSHNetConn) RemoteAddr() net.Addr {
+// RemoteAddr in compliance with net.Conn interface
+func (c *Conn) RemoteAddr() net.Addr {
 	return c.remoteAddr
 }
 
-func (c *SSHNetConn) SetDeadline(t time.Time) error {
+// SetDeadline in compliance with net.Conn interface
+func (c *Conn) SetDeadline(t time.Time) error {
 
 	debug.Println("setdeadline called", t)
 	err := c.SetReadDeadline(t)
@@ -207,7 +216,8 @@ func (c *SSHNetConn) SetDeadline(t time.Time) error {
 	return nil
 }
 
-func (c *SSHNetConn) SetReadDeadline(t time.Time) error {
+// SetReadDeadline in compliance with net.Conn interface
+func (c *Conn) SetReadDeadline(t time.Time) error {
 
 	debug.Println("setdreadeadline called", t)
 	c.reader.Deadline = t
@@ -215,7 +225,8 @@ func (c *SSHNetConn) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-func (c *SSHNetConn) SetWriteDeadline(t time.Time) error {
+// SetWriteDeadline in compliance with net.Conn interface
+func (c *Conn) SetWriteDeadline(t time.Time) error {
 
 	debug.Println("setwritedeadline called", t)
 	c.writer.Deadline = t
@@ -223,7 +234,7 @@ func (c *SSHNetConn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
-func (c *SSHNetConn) bufferedReader() {
+func (c *Conn) bufferedReader() {
 	//c.in = make(chan []byte, 64)
 
 	buff := make([]byte, 1500)
@@ -232,7 +243,7 @@ func (c *SSHNetConn) bufferedReader() {
 		send := make([]byte, sendSize)
 		n := copy(send, buff)
 
-		debug.Println("buffered reader [%d][%d]", len(send), sendSize, n)
+		debug.Println("buffered reader:", len(send), sendSize, n)
 		if err != nil {
 			debug.Println("bufferedRead client error:", err)
 
@@ -245,7 +256,7 @@ func (c *SSHNetConn) bufferedReader() {
 	}
 }
 
-func (c *SSHNetConn) buffereWriter() {
+func (c *Conn) buffereWriter() {
 	//c.out = make(chan []byte, 64)
 
 	for {
@@ -257,19 +268,20 @@ func (c *SSHNetConn) buffereWriter() {
 			return
 		}
 
-		debug.Println("buffered writer received [%d][%d]", len(buff))
+		debug.Println("buffered writer received ", len(buff))
 		n, err := c.client.Write(buff)
 
-		debug.Println("buffered writer write [%d][%d]", len(buff), n)
+		debug.Println("buffered writer write ", len(buff), n)
 		if err != nil {
-			debug.Println("bufferedWrite client error:", err)
+			debug.Println("bufferedWrite client error", err)
 			return
 		}
 	}
 }
 
-func NewSSHNetConn(sshConn *ssh.ServerConn, client ssh.Channel) SSHNetConn {
-	var conn SSHNetConn
+// NewConn takes the ssh connection/channel and wraps them in a Conn
+func NewConn(sshConn *ssh.ServerConn, client ssh.Channel) Conn {
+	var conn Conn
 
 	conn.in = make(chan []byte, 1)
 	conn.out = make(chan []byte, 1)
@@ -287,36 +299,42 @@ func NewSSHNetConn(sshConn *ssh.ServerConn, client ssh.Channel) SSHNetConn {
 	return conn
 }
 
-type SSHNetListener struct {
-	connQueue chan *SSHNetConn
-	addr      SSHNetAddr
+// Listener the public structure of the sshnet listener
+type Listener struct {
+	connQueue chan *Conn
+	addr      Addr
 }
 
-func ListenSSHNet() (*SSHNetListener, error) {
+// Listen returns the listener data structure
+func Listen() (*Listener, error) {
 
-	listener := &SSHNetListener{}
-	listener.connQueue = make(chan *SSHNetConn)
+	listener := &Listener{}
+	listener.connQueue = make(chan *Conn)
 
 	return listener, nil
 }
 
-func (l *SSHNetListener) Accept() (net.Conn, error) {
+// Accept connections from the ssh channel connection queue
+func (l *Listener) Accept() (net.Conn, error) {
 
 	conn, _ := <-l.connQueue
 
 	return conn, nil
 }
 
-func (l *SSHNetListener) Close() error {
+// Close unimplemented
+func (l *Listener) Close() error {
 
 	return nil
 }
 
-func (l *SSHNetListener) Addr() net.Addr {
+// Addr returns the address
+func (l *Listener) Addr() net.Addr {
 	return l.addr
 }
 
-func (l *SSHNetListener) Dialer(sshConn *ssh.ServerConn, client ssh.Channel) {
-	conn := NewSSHNetConn(sshConn, client)
+// Dialer connects an ssh channel for a connection to the listener
+func (l *Listener) Dialer(sshConn *ssh.ServerConn, client ssh.Channel) {
+	conn := NewConn(sshConn, client)
 	l.connQueue <- &conn
 }

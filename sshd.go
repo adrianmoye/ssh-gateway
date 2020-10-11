@@ -27,6 +27,7 @@ var HELP_TEMPLATE = `Kubernetes ssh gateway, to use install the kubectl plugin:
   
 `
 
+// SSHServer the ssh server main listener
 func SSHServer(port string, config *ssh.ServerConfig) {
 
 	// Listen for the raw tcp connections
@@ -67,7 +68,7 @@ func genSshServerConfig(privateBytes []byte) *ssh.ServerConfig {
 
 			log.Printf("Failed Login: [%s](%s)", conn.User(), conn.RemoteAddr())
 
-			return nil, fmt.Errorf("Unknown public key\n")
+			return nil, fmt.Errorf("unknown public key")
 
 		},
 
@@ -117,7 +118,7 @@ func handleChannels(client *ssh.ServerConn, chans <-chan ssh.NewChannel) {
 
 /*
   This handles all of the direct tcp proxied connections.
-  we treat the incomming connections casually, as they can either
+  we treat the incoming connections casually, as they can either
   connect to the API server, or not, which should never happen under
   normal usage.
 */
@@ -141,29 +142,27 @@ func handleDirectTcpip(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 
 		return
 
-	} else {
-
-		dest := fmt.Sprintf("%s:%s", os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT"))
-
-		destinationConnection, err := net.Dial("tcp", dest)
-		if err != nil {
-			log.Println("Failed to get tcp connection:", err.Error())
-			return
-		}
-
-		go func() {
-			io.Copy(connection, destinationConnection)
-			destinationConnection.Close()
-			connection.Close()
-		}()
-		go func() {
-			io.Copy(destinationConnection, connection)
-			destinationConnection.Close()
-			connection.Close()
-		}()
-
 	}
 
+	// otherwise we're doing a plain connect proxy
+	dest := fmt.Sprintf("%s:%s", os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT"))
+
+	destinationConnection, err := net.Dial("tcp", dest)
+	if err != nil {
+		log.Println("Failed to get tcp connection:", err.Error())
+		return
+	}
+
+	go func() {
+		io.Copy(connection, destinationConnection)
+		destinationConnection.Close()
+		connection.Close()
+	}()
+	go func() {
+		io.Copy(destinationConnection, connection)
+		destinationConnection.Close()
+		connection.Close()
+	}()
 }
 
 /*
@@ -206,7 +205,7 @@ func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 			case "plugin":
 				fmt.Fprintf(connection, "%s", PLUGIN)
 			case "token":
-				fmt.Fprintf(connection, writeAPIToken(GetToken(name)))
+				fmt.Fprintf(connection, writeAPIToken(name))
 			case "login":
 				if config.OperationMode == "impersonate" {
 					fmt.Fprintf(connection, "%s %s %s %s\n", name, "kubernetes.default:443", "kubernetes.default", config.ProxyCA)

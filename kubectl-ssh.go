@@ -1,5 +1,7 @@
 package main
 
+// PLUGIN The default bash kubectl plugin authenticating
+// with this server
 const PLUGIN = `#!/bin/bash 
 #
 # kubectl plugin to setup an ssh tcp tunnel to an API server.

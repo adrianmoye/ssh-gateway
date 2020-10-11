@@ -18,7 +18,6 @@ The impersonate mode uses [Impersonate-User](https://kubernetes.io/docs/referenc
 Both methods proxy the SSH TCP forwarding channel either directly to the API server, or to a local API proxy which then authenticates the connection.
 The local API proxy generates it's own CA, and a new cert every time it loads.
 
-
     /ssh-gateway --help
     Usage of /ssh-gateway:
       -config string

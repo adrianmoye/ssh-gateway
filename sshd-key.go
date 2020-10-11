@@ -13,12 +13,14 @@ import (
 // https://gist.github.com/devinodaniel/8f9b8a4f31573f428f29ec0e884e6673
 // This shows an example of how to generate a SSH RSA Private/Public key pair and save it locally
 
+// Keys container for public/private ssh keys
 type Keys struct {
 	BitSize    int
 	PublicKey  []byte
 	PrivateKey []byte
 }
 
+// GenKeys returns a pair of ssh public/private keys
 func GenKeys() Keys {
 	var keys Keys
 	keys.BitSize = 4096

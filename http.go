@@ -14,18 +14,20 @@ import (
 	"github.com/adrianmoye/ssh-gateway/src/sshnet"
 )
 
+// ProxyHandler provides the handler for ssh channel requests
+// Arguments are handler func(ResponseWriter, *Request)
 func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 
 	// lets do the auth stuff
 	token := regexp.MustCompilePOSIX("Bearer ").ReplaceAllString(req.Header["Authorization"][0], "")
 	//log.Printf(" user token\n[%s]\n[%s]\n",t,token)
 	record := GetNameFromToken(token)
-	if !(len(record.Name) > 0) {
+	if !(len(record) > 0) {
 		log.Printf("FAILED REQ [%s] [%s] [%s]\n", "UNKNOWN", req.Method, req.URL.Path)
 		// TODO: handle failure better
 		return
 	}
-	name := record.Name
+	name := record
 
 	//req.RemoteAddr
 
@@ -42,9 +44,15 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 			log.Println(err)
 		}
 
+		newReq.Header.Add("X-Forwarded-For", req.RemoteAddr)
 		newReq.Header.Add("Authorization", config.Api.bearer)
 		newReq.Header.Add("Impersonate-User", name)
+		// we need to make sure we get the connection back after we allow
+		// the upgrade. Otherwise the client will start sending it's own
+		// Authorization headers directly to the API, and getting denied.
 		newReq.Header.Add("Connection", "close")
+
+		// These are the header types we'll forward.
 		for _, h := range []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"} {
 			if val, ok := req.Header[h]; ok {
 				for i := range val {
@@ -85,6 +93,7 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 		}
 
 		connectHeader := make(http.Header)
+		connectHeader.Set("X-Forwarded-For", req.RemoteAddr)
 		connectHeader.Set("Authorization", config.Api.bearer)
 		connectHeader.Set("Impersonate-User", name)
 		connectHeader.Set("Connection", "close")
@@ -108,8 +117,6 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 			destConn.Close()
 			return
 		}
-		//connectReq.Write(dest_conn)
-		//io.Copy(dest_conn, req.Body)
 
 		//fmt.Println("Hijacking")
 
@@ -149,7 +156,7 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 
 }
 
-func https_server(Certs RawPEM) *sshnet.SSHNetListener {
+func httpsServer(Certs RawPEM) *sshnet.Listener {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", ProxyHandler)
 
@@ -176,7 +183,9 @@ func https_server(Certs RawPEM) *sshnet.SSHNetListener {
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
 	}
 
-	sshNetListener, _ := sshnet.ListenSSHNet()
+	// Create listener for ssh channels, and serve them
+	// through a tls enabled webserver
+	sshNetListener, _ := sshnet.Listen()
 	tlsListener := tls.NewListener(sshNetListener, cfg)
 	go server.Serve(tlsListener)
 	return sshNetListener

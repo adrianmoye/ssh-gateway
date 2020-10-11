@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-//* just the raw bytes of the certs
+// RawPEM just the raw bytes of the certs
 type RawPEM struct {
 	Key  []byte
 	Cert []byte
@@ -69,6 +69,7 @@ func genCA(CN string) (OUT RawPEM) {
 	return
 }
 
+// DecodeCert (CA RawPEM) returns the x509 cert and key from the raw pem files
 func DecodeCert(CA RawPEM) (cert *x509.Certificate, key *rsa.PrivateKey) {
 
 	block, _ := pem.Decode(CA.Cert)
@@ -85,7 +86,7 @@ func DecodeCert(CA RawPEM) (cert *x509.Certificate, key *rsa.PrivateKey) {
 	return
 }
 
-// pass in the CN of the cert and raw PEM, output the new certs raw PEM
+// SignedCert pass in the CN of the cert and raw PEM, output the new certs raw PEM
 func SignedCert(CN string, CA RawPEM) (OUT RawPEM) {
 
 	CACert, CAKey := DecodeCert(CA)

@@ -22,12 +22,11 @@ type gwConfig struct {
 	OperationMode string
 	SecretName    string
 	ResourceType  string
-	Listener      *sshnet.SSHNetListener
+	Listener      *sshnet.Listener
 }
 
-var config gwConfig
-
-func setupConfig() {
+func setupConfig() gwConfig {
+	var config gwConfig
 
 	PORT := flag.String("port", "2200", "Listen Port")
 	CONFIG_SECRET := flag.String("config", "ssh-gateway-config", "Config Secret Name")
@@ -87,17 +86,18 @@ func setupConfig() {
 		log.Printf("Created secret with keys: [%s]\n", config.SecretName)
 	}
 
-	//temp, _ := base64.StdEncoding.DecodeString(secret.Data["ca_cert"])
-	//config.Api.ca = string(temp)
 	sshd_key, _ := base64.StdEncoding.DecodeString(secret.Data["sshd_key"])
 	config.Ssh = genSshServerConfig(sshd_key)
 
+	return config
 }
 
-func main() {
-	setupConfig()
+var config gwConfig
 
-	config.Listener = https_server(config.ProxyCert)
+func main() {
+	config = setupConfig()
+
+	config.Listener = httpsServer(config.ProxyCert)
 
 	SSHServer(config.Port, config.Ssh)
 
