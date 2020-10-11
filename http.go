@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+
+	"github.com/adrianmoye/ssh-gateway/src/sshnet"
 )
 
 func ProxyHandler(w http.ResponseWriter, req *http.Request) {
@@ -25,7 +27,9 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	name := record.Name
 
-	log.Printf("REQ [%s] [%s] [%s]\n", name, req.Method, req.URL.Path)
+	//req.RemoteAddr
+
+	log.Printf("REQ [%s][%s] [%s] [%s]\n", req.RemoteAddr, name, req.Method, req.URL.Path)
 
 	if _, ok := req.Header["Upgrade"]; !ok {
 
@@ -145,7 +149,7 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 
 }
 
-func https_server(Certs RawPEM) {
+func https_server(Certs RawPEM) *sshnet.SSHNetListener {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", ProxyHandler)
 
@@ -172,11 +176,8 @@ func https_server(Certs RawPEM) {
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
 	}
 
-	unixListener, err := tls.Listen("unix", "@sshd", cfg)
-	if err != nil {
-		log.Println(err)
-	}
-
-	server.Serve(unixListener)
-
+	sshNetListener, _ := sshnet.ListenSSHNet()
+	tlsListener := tls.NewListener(sshNetListener, cfg)
+	go server.Serve(tlsListener)
+	return sshNetListener
 }

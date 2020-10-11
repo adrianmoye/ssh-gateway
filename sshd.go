@@ -106,7 +106,7 @@ func handleChannels(client *ssh.ServerConn, chans <-chan ssh.NewChannel) {
 			go handleSession(client, newChannel)
 
 		case "direct-tcpip":
-			go handleDirectTcpip(newChannel)
+			go handleDirectTcpip(client, newChannel)
 
 		default:
 			log.Printf("unknown new channel [%s]\n", t)
@@ -121,7 +121,7 @@ func handleChannels(client *ssh.ServerConn, chans <-chan ssh.NewChannel) {
   connect to the API server, or not, which should never happen under
   normal usage.
 */
-func handleDirectTcpip(sshChan ssh.NewChannel) {
+func handleDirectTcpip(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 
 	/* we should unmarshal the payload to get the destination, but we don't care,
 	   we'll just forward it to the api server anyway */
@@ -132,45 +132,37 @@ func handleDirectTcpip(sshChan ssh.NewChannel) {
 	}
 	go ssh.DiscardRequests(requests)
 
-	var destinationConnection net.Conn
-
 	if config.OperationMode == "impersonate" {
 
-		addr, err := net.ResolveUnixAddr("unix", "@sshd")
-		if err != nil {
-			log.Println("Failed to get unix connection:", err.Error())
-			return
-		}
-		destinationConnection, err = net.DialUnix("unix", nil, addr)
+		// We dial our local tls/webserver proxy
+		// and pass through the ssh channel as though
+		// it was a network connection.
+		config.Listener.Dialer(client, connection)
+
+		return
 
 	} else {
+
 		dest := fmt.Sprintf("%s:%s", os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT"))
 
-		destinationConnection, err = net.Dial("tcp", dest)
+		destinationConnection, err := net.Dial("tcp", dest)
 		if err != nil {
 			log.Println("Failed to get tcp connection:", err.Error())
 			return
 		}
 
-	}
-	//log.Println("Established TCP connection")
+		go func() {
+			io.Copy(connection, destinationConnection)
+			destinationConnection.Close()
+			connection.Close()
+		}()
+		go func() {
+			io.Copy(destinationConnection, connection)
+			destinationConnection.Close()
+			connection.Close()
+		}()
 
-	if err != nil {
-		log.Println("Failed to dial unix:", err.Error())
-		sshChan.Reject(ssh.ConnectionFailed, err.Error())
-		return
 	}
-
-	go func() {
-		io.Copy(connection, destinationConnection)
-		destinationConnection.Close()
-		connection.Close()
-	}()
-	go func() {
-		io.Copy(destinationConnection, connection)
-		destinationConnection.Close()
-		connection.Close()
-	}()
 
 }
 

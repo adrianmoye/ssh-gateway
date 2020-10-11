@@ -9,6 +9,7 @@ import (
 	"flag"
 	"log"
 
+	"github.com/adrianmoye/ssh-gateway/src/sshnet"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -21,6 +22,7 @@ type gwConfig struct {
 	OperationMode string
 	SecretName    string
 	ResourceType  string
+	Listener      *sshnet.SSHNetListener
 }
 
 var config gwConfig
@@ -58,8 +60,8 @@ func setupConfig() {
 	var CA RawPEM
 	if _, ok := secret.Data["ca_cert"]; !ok {
 		CA = genCA("SSH Gateway CA")
-		log.Println(string(CA.Cert))
-		log.Println(string(CA.Key))
+		//log.Println(string(CA.Cert))
+		//log.Println(string(CA.Key))
 		secret.Data["ca_cert"] = base64.StdEncoding.EncodeToString([]byte(CA.Cert))
 		secret.Data["ca_key"] = base64.StdEncoding.EncodeToString([]byte(CA.Key))
 	}
@@ -95,7 +97,7 @@ func setupConfig() {
 func main() {
 	setupConfig()
 
-	go https_server(config.ProxyCert)
+	config.Listener = https_server(config.ProxyCert)
 
 	SSHServer(config.Port, config.Ssh)
 
