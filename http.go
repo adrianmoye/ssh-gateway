@@ -23,7 +23,7 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 	//log.Printf(" user token\n[%s]\n[%s]\n",t,token)
 	record := GetNameFromToken(token)
 	if !(len(record) > 0) {
-		log.Printf("FAILED REQ [%s] [%s] [%s]\n", "UNKNOWN", req.Method, req.URL.Path)
+		log.Printf("FAILED REQ [%s][%s] [%s] [%s]\n", "UNKNOWN", req.RemoteAddr, req.Method, req.URL.Path)
 		// TODO: handle failure better
 		return
 	}
@@ -185,7 +185,7 @@ func httpsServer(Certs RawPEM) *sshnet.Listener {
 
 	// Create listener for ssh channels, and serve them
 	// through a tls enabled webserver
-	sshNetListener, _ := sshnet.Listen()
+	sshNetListener, _ := sshnet.Listen("0.0.0.0:" + config.Port)
 	tlsListener := tls.NewListener(sshNetListener, cfg)
 	go server.Serve(tlsListener)
 	return sshNetListener

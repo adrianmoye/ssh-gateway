@@ -134,6 +134,8 @@ func readfile(name string) string {
 	v, e := ioutil.ReadFile(name)
 	if e != nil {
 		log.Println(e)
+		log.Println("Kubernetes pod environment not detected")
+		log.Fatal("access to service account files is required")
 	}
 	return string(v)
 }
@@ -200,7 +202,7 @@ func CheckKey(name string, key ssh.PublicKey) bool {
 
 				} else {
 			*/
-			if config.OperationMode == "impersonate" {
+			if config.OperationMode != "impersonate" {
 
 				config.Api.Get(fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", config.Api.namespace, SA.Secrets[0].Name), &secret)
 				token, _ := base64.StdEncoding.DecodeString(secret.Data["token"])

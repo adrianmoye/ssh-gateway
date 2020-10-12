@@ -12,7 +12,7 @@ import (
 // Debug make true to log debug messages
 type Debug bool
 
-// Println a wrapper for log.Println
+// Println a wrapper for debug.Println
 func (d Debug) Println(v ...interface{}) {
 	if d {
 		Log.Println(v...)
@@ -235,7 +235,8 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 }
 
 func (c *Conn) bufferedReader() {
-	//c.in = make(chan []byte, 64)
+	//c.in = make(chan []byte, 1)
+	//c.reader = newCopyDeadline()
 
 	buff := make([]byte, 1500)
 	for {
@@ -257,7 +258,8 @@ func (c *Conn) bufferedReader() {
 }
 
 func (c *Conn) buffereWriter() {
-	//c.out = make(chan []byte, 64)
+	//c.out = make(chan []byte, 1)
+	//c.writer = newCopyDeadline()
 
 	for {
 		buff, ok := <-c.out
@@ -281,50 +283,62 @@ func (c *Conn) buffereWriter() {
 
 // NewConn takes the ssh connection/channel and wraps them in a Conn
 func NewConn(sshConn *ssh.ServerConn, client ssh.Channel) Conn {
-	var conn Conn
+	var c Conn
 
-	conn.in = make(chan []byte, 1)
-	conn.out = make(chan []byte, 1)
-	conn.sshConn = sshConn
-	conn.client = client
+	c.in = make(chan []byte, 1)
+	c.out = make(chan []byte, 1)
+	c.sshConn = sshConn
+	c.client = client
 
-	conn.remoteAddr.addr = conn.sshConn.User() + "@" + conn.sshConn.RemoteAddr().String()
+	c.remoteAddr.addr = c.sshConn.User() + "@" + c.sshConn.RemoteAddr().String()
 
-	conn.reader = newCopyDeadline()
-	conn.writer = newCopyDeadline()
+	c.reader = newCopyDeadline()
+	c.writer = newCopyDeadline()
 
-	go conn.bufferedReader()
-	go conn.buffereWriter()
+	go c.bufferedReader()
+	go c.buffereWriter()
 
-	return conn
+	return c
 }
 
 // Listener the public structure of the sshnet listener
 type Listener struct {
 	connQueue chan *Conn
+	closed    bool
 	addr      Addr
 }
 
 // Listen returns the listener data structure
-func Listen() (*Listener, error) {
+func Listen(addr string) (*Listener, error) {
 
 	listener := &Listener{}
+	listener.closed = false
+	listener.addr.addr = addr
 	listener.connQueue = make(chan *Conn)
 
+	debug.Println(len(listener.connQueue), cap(listener.connQueue))
+
+	debug.Println("Listening:" + addr)
 	return listener, nil
 }
 
 // Accept connections from the ssh channel connection queue
 func (l *Listener) Accept() (net.Conn, error) {
 
+	debug.Println("accept")
 	conn, _ := <-l.connQueue
+	/*
+		if err {
+			return nil, os.ErrClosed
+		}*/
 
 	return conn, nil
 }
 
-// Close unimplemented
+// Close  the receive listener channel
 func (l *Listener) Close() error {
-
+	//l.closed = true
+	//close(l.connQueue)
 	return nil
 }
 
@@ -336,5 +350,9 @@ func (l *Listener) Addr() net.Addr {
 // Dialer connects an ssh channel for a connection to the listener
 func (l *Listener) Dialer(sshConn *ssh.ServerConn, client ssh.Channel) {
 	conn := NewConn(sshConn, client)
+	debug.Println("doing put connection on listen queue")
+	debug.Println(len(l.connQueue), cap(l.connQueue))
 	l.connQueue <- &conn
+
+	debug.Println("done put connection on listen queue")
 }

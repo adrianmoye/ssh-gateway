@@ -41,8 +41,6 @@ func setupConfig() gwConfig {
 
 	config.Api = getApiClientConfig()
 
-	users = make(map[string]User)
-
 	var secret Secret
 
 	var updateSecret bool = false
@@ -99,6 +97,6 @@ func main() {
 
 	config.Listener = httpsServer(config.ProxyCert)
 
-	SSHServer(config.Port, config.Ssh)
+	SSHServer()
 
 }

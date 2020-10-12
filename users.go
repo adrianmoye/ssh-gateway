@@ -8,16 +8,8 @@ import (
 	"time"
 )
 
-/*
-type User struct {
-	Name  string
-	Token string
-	Ssh   string
-}
-
-var users map[string]User
-var tokens map[string]User
-*/
+const TOKEN_LIFE = 30 * time.Minute
+const TOKEN_REFRESH = 10 * time.Minute
 
 // APIToken structured format for JSON api token
 type APIToken struct {
@@ -39,8 +31,8 @@ type User struct {
 	OldToken Token
 }
 
-var users map[string]User
-var tokens map[string]string
+var users map[string]User = make(map[string]User)
+var tokens map[string]string = make(map[string]string)
 
 func b64(input string) string {
 	return base64.StdEncoding.EncodeToString([]byte(input))
@@ -50,8 +42,8 @@ func genToken() (ret Token) {
 	buf := make([]byte, 510)
 	_, _ = rand.Read(buf)
 	ret.Value = b64(string(buf))
-	// default expiry time set to 1 minute for testing
-	ret.Expire = time.Now().Add(1 * time.Minute)
+	// default expiry time
+	ret.Expire = time.Now().Add(TOKEN_LIFE)
 	return
 }
 
@@ -69,8 +61,8 @@ func GetToken(name string) string {
 		tokens[users[name].OldToken.Value] = name
 	}
 
-	// rotate tokens if they're about to expire (30 seconds for testing)
-	if users[name].Token.Expire.Before(time.Now().Add(30 * time.Second)) {
+	// rotate tokens if they're about to expire within the refresh window
+	if users[name].Token.Expire.Before(time.Now().Add(TOKEN_REFRESH)) {
 		// delete the old token from the tokens list
 		delete(tokens, users[name].OldToken.Value)
 		user := users[name]
@@ -87,8 +79,9 @@ func GetToken(name string) string {
 func GetNameFromToken(token string) string {
 	if username, ok := tokens[token]; ok {
 		if ((users[tokens[token]].Token.Value == token) &&
-			(time.Now().Before(users[tokens[token]].Token.Expire))) || (users[tokens[token]].OldToken.Value == token &&
-			time.Now().Before(users[tokens[token]].OldToken.Expire)) {
+			(time.Now().Before(users[tokens[token]].Token.Expire))) ||
+			((users[tokens[token]].OldToken.Value == token) &&
+				(time.Now().Before(users[tokens[token]].OldToken.Expire))) {
 
 			return username
 		}

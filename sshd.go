@@ -28,16 +28,16 @@ var HELP_TEMPLATE = `Kubernetes ssh gateway, to use install the kubectl plugin:
 `
 
 // SSHServer the ssh server main listener
-func SSHServer(port string, config *ssh.ServerConfig) {
+func SSHServer() {
 
 	// Listen for the raw tcp connections
-	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", port))
+	listener, err := net.Listen("tcp", "0.0.0.0:"+config.Port)
 	if err != nil {
-		log.Fatalf("Failed to listen on %s (%s)", port, err)
+		log.Fatalf("Failed to listen on %s (%s)", config.Port, err)
 	}
 
 	// Accept all connections
-	log.Printf("Listening on port [%s]...", port)
+	log.Printf("Listening on port [%s]...", config.Port)
 	for {
 		tcpConn, err := listener.Accept()
 		if err != nil {
@@ -46,7 +46,7 @@ func SSHServer(port string, config *ssh.ServerConfig) {
 		}
 
 		// pass the connection through to the ssh handler
-		go handleSshUpgrade(tcpConn, config)
+		go handleSshUpgrade(tcpConn)
 	}
 }
 
@@ -85,8 +85,8 @@ func genSshServerConfig(privateBytes []byte) *ssh.ServerConfig {
 	return config
 }
 
-func handleSshUpgrade(tcpConn net.Conn, config *ssh.ServerConfig) {
-	client, chans, reqs, err := ssh.NewServerConn(tcpConn, config)
+func handleSshUpgrade(tcpConn net.Conn) {
+	client, chans, reqs, err := ssh.NewServerConn(tcpConn, config.Ssh)
 	if err != nil {
 		log.Printf("Failed to handshake (%s)", err)
 		return
@@ -189,6 +189,7 @@ func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 		case "pty-req":
 		case "env":
 		case "shell":
+			log.Println(name+"@"+client.RemoteAddr().String(), " REQ SHELL HELP")
 			if len(req.Payload) == 0 {
 				req.Reply(true, nil)
 			} else {
@@ -203,16 +204,20 @@ func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 			cmd := string(req.Payload[4:])
 			switch cmd {
 			case "plugin":
+				log.Println(name+"@"+client.RemoteAddr().String(), " REQ PLUGIN")
 				fmt.Fprintf(connection, "%s", PLUGIN)
 			case "token":
+				log.Println(name+"@"+client.RemoteAddr().String(), " REQ TOKEN")
 				fmt.Fprintf(connection, writeAPIToken(name))
 			case "login":
+				log.Println(name+"@"+client.RemoteAddr().String(), " REQ LOGIN")
 				if config.OperationMode == "impersonate" {
 					fmt.Fprintf(connection, "%s %s %s %s\n", name, "kubernetes.default:443", "kubernetes.default", config.ProxyCA)
 				} else {
 					fmt.Fprintf(connection, "%s %s %s %s\n", name, "kubernetes.default:443", "kubernetes.default", b64(config.Api.ca))
 				}
 			default:
+				log.Println(name+"@"+client.RemoteAddr().String(), " REQ COMMAND HELP")
 				fmt.Fprintf(connection, help)
 			}
 
