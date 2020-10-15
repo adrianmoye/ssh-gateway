@@ -37,7 +37,7 @@ function HELP ()
 # run ssh to setup a control socket for the connection.
 function SSH ()
 {
-	# control path format "ssh-<unique context>_@_<ssh connection details>"
+	# control path/mux for ssh
 	ssh \
 	-o "ControlPath=~/.kube/ssh-%r@%h:%p" \
 	-o "ControlMaster=auto" \
@@ -67,15 +67,14 @@ case "$1" in
 		SERVER="$1"
 		shift
 
-		# make sure the mux connection is established
-		SSH $@ login >/dev/null
+		# request token from the remote endpoint.
+		# this then gets sent back to kubectl.
+		SSH $@ token
 		# enable forwarding for the local tcp connection
 		# to the kubernetes server endpoint via the ssh
 		# tunnel.
 		SSH $@ -O forward -L "${PORT}:${SERVER}"
-		# request token from the remote endpoint.
-		# this then gets sent back to kubectl.
-		SSH $@ token
+
 		exit 0
 
 	;;

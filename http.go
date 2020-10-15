@@ -2,13 +2,11 @@ package main
 
 import (
 	"crypto/tls"
-	"fmt"
+	//"crypto/x509"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 
 	"github.com/adrianmoye/ssh-gateway/src/sshnet"
@@ -31,126 +29,92 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 
 	//req.RemoteAddr
 
-	log.Printf("REQ [%s][%s] [%s] [%s]\n", req.RemoteAddr, name, req.Method, req.URL.Path)
+	log.Printf("REQ [%s][%s] [%s] [%s]", req.RemoteAddr, name, req.Method, req.URL.Path)
 
-	if _, ok := req.Header["Upgrade"]; !ok {
+	//log.Printf("upgrade REQ [%s] [%s] [%s]\n", name, req.Method, req.URL.Path)
 
-		//log.Printf("main REQ [%s] [%s] [%s]\n", name, req.Method, req.URL.Path)
+	//dest := config.Api.host + ":" + config.Api.port
+	//dest := fmt.Sprintf("%s:%s", os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT"))
 
-		client := &http.Client{Transport: config.Api.transport}
+	destConn, err := tls.Dial("tcp", config.Api.dest, config.TlsConfig)
 
-		newReq, err := http.NewRequest(req.Method, config.Api.base+req.URL.Path+"?"+req.URL.RawQuery, req.Body)
-		if err != nil {
-			log.Println(err)
-		}
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
 
-		newReq.Header.Add("X-Forwarded-For", req.RemoteAddr)
-		newReq.Header.Add("Authorization", config.Api.bearer)
-		newReq.Header.Add("Impersonate-User", name)
-		// we need to make sure we get the connection back after we allow
-		// the upgrade. Otherwise the client will start sending it's own
-		// Authorization headers directly to the API, and getting denied.
-		newReq.Header.Add("Connection", "close")
+	connectHeader := make(http.Header)
 
-		// These are the header types we'll forward.
-		for _, h := range []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"} {
-			if val, ok := req.Header[h]; ok {
-				for i := range val {
-					newReq.Header.Add(h, val[i])
-				}
-			}
-		}
-		newResp, err := client.Do(newReq)
-		if err != nil {
-			log.Println(err)
-		}
-
-		for h := range newResp.Header {
-			if val, ok := newResp.Header[h]; ok {
-				for i := range val {
-					w.Header().Add(h, val[i])
-				}
-			}
-		}
-
-		data, err := ioutil.ReadAll(newResp.Body)
-		if err != nil {
-			log.Println(err)
-		}
-		w.Write(data)
-
-	} else {
-
-		//log.Printf("upgrade REQ [%s] [%s] [%s]\n", name, req.Method, req.URL.Path)
-
-		dest := fmt.Sprintf("%s:%s", os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT"))
-		destConn, err := tls.Dial("tcp", dest, config.Api.transport.TLSClientConfig)
-
-		if err != nil {
-			log.Println(err)
-			http.Error(w, err.Error(), http.StatusServiceUnavailable)
-			return
-		}
-
-		connectHeader := make(http.Header)
-		connectHeader.Set("X-Forwarded-For", req.RemoteAddr)
+	switch config.OperationMode {
+	case "serviceaccount": // TODO, give the SA token
+		connectHeader.Set("Authorization", config.Api.bearer)
+	case "proxy":
+		//connectHeader.Set("Authorization", config.Api.bearer)
+		connectHeader.Set("X-Remote-User", name)
+		connectHeader.Set("X-Remote-Group", name)
+	default: //  "impersonate"
 		connectHeader.Set("Authorization", config.Api.bearer)
 		connectHeader.Set("Impersonate-User", name)
-		connectHeader.Set("Connection", "close")
-		for _, h := range []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"} {
-			if val, ok := req.Header[h]; ok {
-				for i := range val {
-					connectHeader.Set(h, val[i])
-				}
+	}
+
+	connectHeader.Set("X-Forwarded-For", req.RemoteAddr)
+	connectHeader.Set("Connection", "close")
+	for _, h := range config.CopyHeaders {
+		if val, ok := req.Header[h]; ok {
+			for i := range val {
+				connectHeader.Set(h, val[i])
 			}
 		}
-
-		connectReq := &http.Request{
-			Method: req.Method,
-			URL:    &url.URL{Opaque: config.Api.base + req.URL.Path + "?" + req.URL.RawQuery},
-			Host:   dest,
-			Header: connectHeader,
-		}
-
-		if err := connectReq.Write(destConn); err != nil {
-			log.Println(err)
-			destConn.Close()
-			return
-		}
-
-		//fmt.Println("Hijacking")
-
-		hijacker, ok := w.(http.Hijacker)
-		if !ok {
-			log.Println(err)
-			http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
-			return
-		}
-		//fmt.Println("getting client con")
-		clientConn, _, err := hijacker.Hijack()
-		if err != nil {
-			log.Println(err)
-			http.Error(w, err.Error(), http.StatusServiceUnavailable)
-		}
-		//log.Println("going to transfer mode")
-
-		waitfor := make(chan bool)
-
-		go func() {
-			io.Copy(destConn, clientConn)
-			waitfor <- true
-		}()
-		go func() {
-			io.Copy(clientConn, destConn)
-			waitfor <- true
-		}()
-
-		//log.Println("waiting to close")
-		<-waitfor
-
-		clientConn.Close()
-		destConn.Close()
 	}
+
+	connectReq := &http.Request{
+		Method: req.Method,
+		URL:    &url.URL{Opaque: config.Api.base + req.URL.Path + "?" + req.URL.RawQuery},
+		Host:   config.Api.dest,
+		Header: connectHeader,
+	}
+
+	if err := connectReq.Write(destConn); err != nil {
+		log.Println(err)
+		destConn.Close()
+		return
+	}
+
+	//fmt.Println("Hijacking")
+
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		log.Println(err)
+		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
+		return
+	}
+	//fmt.Println("getting client con")
+	clientConn, _, err := hijacker.Hijack()
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+	}
+	//log.Println("going to transfer mode")
+
+	waitfor := make(chan bool)
+
+	go func() {
+		io.Copy(destConn, clientConn)
+		waitfor <- true
+	}()
+	go func() {
+		io.Copy(clientConn, destConn)
+		waitfor <- true
+	}()
+
+	//log.Println("waiting to close")
+	<-waitfor
+	<-waitfor
+	close(waitfor)
+
+	clientConn.Close()
+	destConn.Close()
 
 	//log.Println("closed")
 

@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -11,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -22,6 +20,7 @@ type apiConfig struct {
 	port      string
 	token     string
 	ca        string
+	dest      string
 	base      string
 	bearer    string
 	transport *http.Transport
@@ -140,6 +139,27 @@ func readfile(name string) string {
 	return string(v)
 }
 
+func (api apiConfig) UpdateTransport(ProxyCert RawPEM) {
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM([]byte(api.ca))
+
+	//log.Println("keycert:", ProxyCert)
+	cert, err := tls.X509KeyPair(ProxyCert.Cert, ProxyCert.Key)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//log.Println("keycert past fatal:", ProxyCert)
+	// Setup HTTPS client
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+	}
+	tlsConfig.BuildNameToCertificate()
+	api.transport = &http.Transport{TLSClientConfig: tlsConfig}
+}
+
 func getApiClientConfig() apiConfig {
 	var config apiConfig
 
@@ -149,13 +169,15 @@ func getApiClientConfig() apiConfig {
 	config.token = readfile("/var/run/secrets/kubernetes.io/serviceaccount/token")
 	config.ca = readfile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
 
-	config.base = fmt.Sprintf("https://%s:%s", config.host, config.port)
+	config.dest = config.host + ":" + config.port
+	config.base = "https://" + config.dest
 	config.bearer = fmt.Sprintf("Bearer %s", config.token)
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM([]byte(config.ca))
 
 	// Setup HTTPS client
 	tlsConfig := &tls.Config{
+		//Certificates: []tls.Certificate{cert},
 		RootCAs: caCertPool,
 	}
 	tlsConfig.BuildNameToCertificate()
@@ -166,22 +188,28 @@ func getApiClientConfig() apiConfig {
 
 // CheckKey checks an ssh public key for name against the api objects public key
 func CheckKey(name string, key ssh.PublicKey) bool {
-	var SA Serviceaccount
+	//var SA Serviceaccount
 	var GenRes GenericHeader
-	var secret Secret
+	//var secret Secret
 	var ssh_key string
+	/*
+		if config.OperationMode == "impersonate" {
+			config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
 
-	if config.OperationMode == "impersonate" {
-		config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
+			if t, ok := GenRes.Metadata.Annotations["ssh"]; ok {
+				ssh_key = t
+			}
+		} else {
+			config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+name, &SA)
+			if t, ok := SA.Metadata.Annotations["ssh"]; ok {
+				ssh_key = t
+			}
+		}
+	*/
+	config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
 
-		if t, ok := GenRes.Metadata.Annotations["ssh"]; ok {
-			ssh_key = t
-		}
-	} else {
-		config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+name, &SA)
-		if t, ok := SA.Metadata.Annotations["ssh"]; ok {
-			ssh_key = t
-		}
+	if t, ok := GenRes.Metadata.Annotations["ssh"]; ok {
+		ssh_key = t
 	}
 	// log.Println("request: ","/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+ name)
 
@@ -202,17 +230,19 @@ func CheckKey(name string, key ssh.PublicKey) bool {
 
 				} else {
 			*/
-			if config.OperationMode != "impersonate" {
+			/*
+				if config.OperationMode == "serviceaccount" {
 
-				config.Api.Get(fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", config.Api.namespace, SA.Secrets[0].Name), &secret)
-				token, _ := base64.StdEncoding.DecodeString(secret.Data["token"])
+					config.Api.Get(fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", config.Api.namespace, SA.Secrets[0].Name), &secret)
+					token, _ := base64.StdEncoding.DecodeString(secret.Data["token"])
 
-				users[name] = User{
-					Username: name,
-					Token:    Token{string(token), time.Now()},
+					users[name] = User{
+						Username: name,
+						Token:    Token{string(token), time.Now()},
+					}
+
 				}
-
-			}
+			*/
 			return true
 		}
 	}

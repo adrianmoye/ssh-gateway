@@ -11,19 +11,21 @@ Installation is as simple as deploying a pod, exposing it to the outside, adding
 How it works
 ------------
 
-There are two main modes, the serviceaccount mode uses service accounts for authentication, it passes the traffic through directly and you use the service account token for auth.
+There are three main modes:
 
-The impersonate mode uses [Impersonate-User](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#user-impersonation) header using the service account of the pod.
+* The "serviceaccount" mode uses service accounts for authentication, it uses service account tokens to authenticate users.
+* The "impersonate" mode uses [Impersonate-User](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#user-impersonation) header using the service account of the pod.
+* The "proxy" mode uses an [Authenticating Proxy](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#authenticating-proxy), and sends the recommended "X-Remote-User" etc headers.
 
-Both methods proxy the SSH TCP forwarding channel either directly to the API server, or to a local API proxy which then authenticates the connection.
-The local API proxy generates it's own CA, and a new cert every time it loads.
+The client proxies the SSH TCP forwarding channel to a local API proxy which then authenticates the connection, and passes the request onto the API server.
+The local API proxy will automatically generate it's own CA, and a new cert every time it loads.
 
     /ssh-gateway --help
     Usage of /ssh-gateway:
       -config string
           Config Secret Name (default "ssh-gateway-config")
       -mode string
-          Operating mode (serviceaccount|impersonate) (default "impersonate")
+          Operating mode (serviceaccount|proxy|impersonate) (default "impersonate")
       -port string
           Listen Port (default "2200")
       -resource string
@@ -34,7 +36,12 @@ To use it
 
 Deploy the container in a dedicated namespace and expose the port. Give the container a service account either with "cluster-admin" access for the "impersonate" mode, or with access to read service account and secret resources in it's namespace for the "serviceaccount" mode.
 
-To use it create a resource with the desired username, and then annotate the the resource with the ssh key:
+If you wish to use the "proxy" mode, you will need to replace the auto-generated CA with the default one created by kubeadm in:
+
+    $ ls /etc/kubernetes/pki/front-proxy-ca.*
+    /etc/kubernetes/pki/front-proxy-ca.crt  /etc/kubernetes/pki/front-proxy-ca.key 
+
+To use it create a resource with the desired username, and then annotate the the resource with the ssh key(we use an SA here, but anything will do if you're not using "serviceaccount" mode):
 
     $ kubectl create sa -n users user
     $ kubectl annotate -n users --overwrite sa user ssh="ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQE....7ywzbQ== user@example.com"

@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net"
-	"os"
 	"regexp"
 
 	"golang.org/x/crypto/ssh"
@@ -133,36 +131,11 @@ func handleDirectTcpip(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 	}
 	go ssh.DiscardRequests(requests)
 
-	if config.OperationMode == "impersonate" {
+	// We dial our local tls/webserver proxy
+	// and pass through the ssh channel as though
+	// it was a network connection.
+	config.Listener.Dialer(client, connection)
 
-		// We dial our local tls/webserver proxy
-		// and pass through the ssh channel as though
-		// it was a network connection.
-		config.Listener.Dialer(client, connection)
-
-		return
-
-	}
-
-	// otherwise we're doing a plain connect proxy
-	dest := fmt.Sprintf("%s:%s", os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT"))
-
-	destinationConnection, err := net.Dial("tcp", dest)
-	if err != nil {
-		log.Println("Failed to get tcp connection:", err.Error())
-		return
-	}
-
-	go func() {
-		io.Copy(connection, destinationConnection)
-		destinationConnection.Close()
-		connection.Close()
-	}()
-	go func() {
-		io.Copy(destinationConnection, connection)
-		destinationConnection.Close()
-		connection.Close()
-	}()
 }
 
 /*
@@ -211,11 +184,11 @@ func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 				fmt.Fprintf(connection, writeAPIToken(name))
 			case "login":
 				log.Println(name+"@"+client.RemoteAddr().String(), " REQ LOGIN")
-				if config.OperationMode == "impersonate" {
-					fmt.Fprintf(connection, "%s %s %s %s\n", name, "kubernetes.default:443", "kubernetes.default", config.ProxyCA)
-				} else {
-					fmt.Fprintf(connection, "%s %s %s %s\n", name, "kubernetes.default:443", "kubernetes.default", b64(config.Api.ca))
-				}
+				//if config.OperationMode == "impersonate" {
+				fmt.Fprintf(connection, "%s %s %s %s\n", name, "kubernetes.default:443", "kubernetes.default", config.ProxyCA)
+				//} else {
+				//	fmt.Fprintf(connection, "%s %s %s %s\n", name, "kubernetes.default:443", "kubernetes.default", b64(config.Api.ca))
+				//}
 			default:
 				log.Println(name+"@"+client.RemoteAddr().String(), " REQ COMMAND HELP")
 				fmt.Fprintf(connection, help)

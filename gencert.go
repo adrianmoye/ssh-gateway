@@ -93,15 +93,15 @@ func SignedCert(CN string, CA RawPEM) (OUT RawPEM) {
 
 	// set up our server certificate
 	cert := &x509.Certificate{
-		SerialNumber: big.NewInt(2019),
+		SerialNumber: big.NewInt(2020),
 		Subject: pkix.Name{
-			CommonName:   CN,
+			CommonName:   "front-proxy-client",
 			Organization: []string{"Kubernetes SSH-API PROXY CA"},
 		},
 		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
 		NotBefore:    time.Now(),
 		NotAfter:     time.Now().AddDate(10, 0, 0),
-		DNSNames:     []string{CN},
+		DNSNames:     []string{"front-proxy-client", CN},
 		SubjectKeyId: []byte{1, 2, 3, 4, 6},
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
@@ -136,5 +136,5 @@ func SignedCert(CN string, CA RawPEM) (OUT RawPEM) {
 	OUT.Key = certPrivKeyPEM.Bytes()
 	log.Printf("Generated server certs/keys\n")
 
-	return
+	return OUT
 }
