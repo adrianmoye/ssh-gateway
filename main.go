@@ -29,26 +29,6 @@ type gwConfig struct {
 	Listener      *sshnet.Listener
 }
 
-func updateTlsConfig() {
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM([]byte(config.Api.ca))
-
-	//log.Println("keycert:", ProxyCert)
-	cert, err := tls.X509KeyPair(config.ProxyCert.Cert, config.ProxyCert.Key)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	//log.Println("keycert past fatal:", ProxyCert)
-	// Setup HTTPS client
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      caCertPool,
-	}
-	tlsConfig.BuildNameToCertificate()
-	config.TlsConfig = tlsConfig
-}
-
 func setupConfig() gwConfig {
 	var config gwConfig
 

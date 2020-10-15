@@ -27,14 +27,9 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	name := record
 
-	//req.RemoteAddr
-
 	log.Printf("REQ [%s][%s] [%s] [%s]", req.RemoteAddr, name, req.Method, req.URL.Path)
 
 	//log.Printf("upgrade REQ [%s] [%s] [%s]\n", name, req.Method, req.URL.Path)
-
-	//dest := config.Api.host + ":" + config.Api.port
-	//dest := fmt.Sprintf("%s:%s", os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT"))
 
 	destConn, err := tls.Dial("tcp", config.Api.dest, config.TlsConfig)
 
@@ -48,7 +43,7 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 
 	switch config.OperationMode {
 	case "serviceaccount": // TODO, give the SA token
-		connectHeader.Set("Authorization", config.Api.bearer)
+		connectHeader.Set("Authorization", SATokens[name])
 	case "proxy":
 		//connectHeader.Set("Authorization", config.Api.bearer)
 		connectHeader.Set("X-Remote-User", name)

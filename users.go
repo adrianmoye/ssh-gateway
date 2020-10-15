@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 )
@@ -33,6 +34,7 @@ type User struct {
 
 var users map[string]User = make(map[string]User)
 var tokens map[string]string = make(map[string]string)
+var SATokens map[string]string = make(map[string]string)
 
 func b64(input string) string {
 	return base64.StdEncoding.EncodeToString([]byte(input))
@@ -71,6 +73,17 @@ func GetToken(name string) string {
 		users[name] = user
 		tokens[users[name].Token.Value] = name
 	}
+
+	if config.OperationMode == "serviceaccount" {
+		var SA Serviceaccount
+
+		var secret Secret
+		config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+name, &SA)
+		config.Api.Get(fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", config.Api.namespace, SA.Secrets[0].Name), &secret)
+		saToken, _ := base64.StdEncoding.DecodeString(secret.Data["token"])
+		SATokens[name] = "Bearer " + string(saToken)
+	}
+
 	return users[name].Token.Value
 }
 

@@ -139,27 +139,6 @@ func readfile(name string) string {
 	return string(v)
 }
 
-func (api apiConfig) UpdateTransport(ProxyCert RawPEM) {
-
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM([]byte(api.ca))
-
-	//log.Println("keycert:", ProxyCert)
-	cert, err := tls.X509KeyPair(ProxyCert.Cert, ProxyCert.Key)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	//log.Println("keycert past fatal:", ProxyCert)
-	// Setup HTTPS client
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      caCertPool,
-	}
-	tlsConfig.BuildNameToCertificate()
-	api.transport = &http.Transport{TLSClientConfig: tlsConfig}
-}
-
 func getApiClientConfig() apiConfig {
 	var config apiConfig
 
@@ -188,24 +167,10 @@ func getApiClientConfig() apiConfig {
 
 // CheckKey checks an ssh public key for name against the api objects public key
 func CheckKey(name string, key ssh.PublicKey) bool {
-	//var SA Serviceaccount
-	var GenRes GenericHeader
-	//var secret Secret
-	var ssh_key string
-	/*
-		if config.OperationMode == "impersonate" {
-			config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
 
-			if t, ok := GenRes.Metadata.Annotations["ssh"]; ok {
-				ssh_key = t
-			}
-		} else {
-			config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+name, &SA)
-			if t, ok := SA.Metadata.Annotations["ssh"]; ok {
-				ssh_key = t
-			}
-		}
-	*/
+	var GenRes GenericHeader
+	var ssh_key string
+
 	config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
 
 	if t, ok := GenRes.Metadata.Annotations["ssh"]; ok {
@@ -216,33 +181,6 @@ func CheckKey(name string, key ssh.PublicKey) bool {
 	if len(ssh_key) > 0 {
 		pubkey, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(ssh_key))
 		if string(key.Marshal()) == string(pubkey.Marshal()) {
-			//var token []byte
-			/*
-				if config.OperationMode == "impersonate" {
-					token := []byte(GetToken(name))
-					//token := "test_token"
-
-					users[name] = User{
-						Name:  name,
-						Token: string(token),
-						Ssh:   string(key.Marshal()),
-					}
-
-				} else {
-			*/
-			/*
-				if config.OperationMode == "serviceaccount" {
-
-					config.Api.Get(fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", config.Api.namespace, SA.Secrets[0].Name), &secret)
-					token, _ := base64.StdEncoding.DecodeString(secret.Data["token"])
-
-					users[name] = User{
-						Username: name,
-						Token:    Token{string(token), time.Now()},
-					}
-
-				}
-			*/
 			return true
 		}
 	}
