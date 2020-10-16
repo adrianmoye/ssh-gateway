@@ -10,8 +10,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-
-	"golang.org/x/crypto/ssh"
 )
 
 type apiConfig struct {
@@ -37,7 +35,7 @@ type Metadata struct {
 
 // Secret standard structure of a k8s secret
 type Secret struct {
-	ApiVersion string            `json:"apiVersion"`
+	APIVersion string            `json:"APIVersion"`
 	Kind       string            `json:"kind"`
 	Metadata   Metadata          `json:"metadata"`
 	Data       map[string]string `json:"data"`
@@ -50,7 +48,7 @@ type ServiceaccountSecrets struct {
 
 // Serviceaccount Standard k8s service account object
 type Serviceaccount struct {
-	ApiVersion string                  `json:"apiVersion"`
+	APIVersion string                  `json:"APIVersion"`
 	Kind       string                  `json:"kind"`
 	Metadata   Metadata                `json:"metadata"`
 	Secrets    []ServiceaccountSecrets `json:"secrets"`
@@ -64,7 +62,7 @@ type ServiceAccountEvent struct {
 
 // GenericHeader generic k8s header format so we can use any object type.
 type GenericHeader struct {
-	ApiVersion string   `json:"apiVersion"`
+	APIVersion string   `json:"APIVersion"`
 	Kind       string   `json:"kind"`
 	Metadata   Metadata `json:"metadata"`
 }
@@ -139,7 +137,7 @@ func readfile(name string) string {
 	return string(v)
 }
 
-func getApiClientConfig() apiConfig {
+func getAPIClientConfig() apiConfig {
 	var config apiConfig
 
 	config.host = os.Getenv("KUBERNETES_SERVICE_HOST")
@@ -163,26 +161,4 @@ func getApiClientConfig() apiConfig {
 	config.transport = &http.Transport{TLSClientConfig: tlsConfig}
 
 	return config
-}
-
-// CheckKey checks an ssh public key for name against the api objects public key
-func CheckKey(name string, key ssh.PublicKey) bool {
-
-	var GenRes GenericHeader
-	var ssh_key string
-
-	config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
-
-	if t, ok := GenRes.Metadata.Annotations["ssh"]; ok {
-		ssh_key = t
-	}
-	// log.Println("request: ","/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+ name)
-
-	if len(ssh_key) > 0 {
-		pubkey, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(ssh_key))
-		if string(key.Marshal()) == string(pubkey.Marshal()) {
-			return true
-		}
-	}
-	return false
 }

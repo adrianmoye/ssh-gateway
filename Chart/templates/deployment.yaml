@@ -40,7 +40,10 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
           - "/ssh-gateway"
-          - --port={{ .Values.service.port }}
+          - --config=" .Values.secretName | default (include "ssh-gateway.fullname" .) }}" }}"
+          - --mode="{{ .Values.mode | default "impersonate" }}"
+          - --resource="{{ .Values.resourceType | default "serviceaccount" }}"
+          - --port="{{ .Values.service.port | default "2200" }}"
           ports:
             - name: ssh
               containerPort: {{ .Values.service.port }}

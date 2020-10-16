@@ -9,6 +9,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// HELP_TEMPLATE default sshd server text
 var HELP_TEMPLATE = `Kubernetes ssh gateway, to use install the kubectl plugin:
   
   ssh <user@host> plugin > kubectl-ssh
@@ -44,11 +45,11 @@ func SSHServer() {
 		}
 
 		// pass the connection through to the ssh handler
-		go handleSshUpgrade(tcpConn)
+		go handleSSHUpgrade(tcpConn)
 	}
 }
 
-func genSshServerConfig(privateBytes []byte) *ssh.ServerConfig {
+func genSSHServerConfig(privateBytes []byte) *ssh.ServerConfig {
 
 	config := &ssh.ServerConfig{
 
@@ -83,8 +84,8 @@ func genSshServerConfig(privateBytes []byte) *ssh.ServerConfig {
 	return config
 }
 
-func handleSshUpgrade(tcpConn net.Conn) {
-	client, chans, reqs, err := ssh.NewServerConn(tcpConn, config.Ssh)
+func handleSSHUpgrade(tcpConn net.Conn) {
+	client, chans, reqs, err := ssh.NewServerConn(tcpConn, config.SSH)
 	if err != nil {
 		log.Printf("Failed to handshake (%s)", err)
 		return
@@ -184,11 +185,7 @@ func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 				fmt.Fprintf(connection, writeAPIToken(name))
 			case "login":
 				log.Println(name+"@"+client.RemoteAddr().String(), " REQ LOGIN")
-				//if config.OperationMode == "impersonate" {
 				fmt.Fprintf(connection, "%s %s %s %s\n", name, "kubernetes.default:443", "kubernetes.default", config.ProxyCA)
-				//} else {
-				//	fmt.Fprintf(connection, "%s %s %s %s\n", name, "kubernetes.default:443", "kubernetes.default", b64(config.Api.ca))
-				//}
 			default:
 				log.Println(name+"@"+client.RemoteAddr().String(), " REQ COMMAND HELP")
 				fmt.Fprintf(connection, help)

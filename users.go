@@ -6,15 +6,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
+// TOKEN_LIFE the lifetime of proxy tokens we create
 const TOKEN_LIFE = 30 * time.Minute
+
+// TOKEN_REFRESH how long before expiry a token can be refreshed
 const TOKEN_REFRESH = 10 * time.Minute
 
 // APIToken structured format for JSON api token
 type APIToken struct {
-	ApiVersion string            `json:"apiVersion"`
+	APIVersion string            `json:"apiVersion"`
 	Kind       string            `json:"kind"`
 	Status     map[string]string `json:"status"`
 }
@@ -28,12 +34,18 @@ type Token struct {
 // User local user record, containing the username and tokens
 type User struct {
 	Username string
+	Groups   *[]string
 	Token    Token
 	OldToken Token
 }
 
+// user records global
 var users map[string]User = make(map[string]User)
+
+// token lookup table to user names for quick searching
 var tokens map[string]string = make(map[string]string)
+
+// SATokens a cache of service account tokens for the user name
 var SATokens map[string]string = make(map[string]string)
 
 func b64(input string) string {
@@ -78,11 +90,13 @@ func GetToken(name string) string {
 		var SA Serviceaccount
 
 		var secret Secret
-		config.Api.Get("/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+name, &SA)
-		config.Api.Get(fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", config.Api.namespace, SA.Secrets[0].Name), &secret)
+		config.API.Get("/api/v1/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &SA)
+		config.API.Get(fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", config.API.namespace, SA.Secrets[0].Name), &secret)
 		saToken, _ := base64.StdEncoding.DecodeString(secret.Data["token"])
 		SATokens[name] = "Bearer " + string(saToken)
 	}
+
+	GetGroups(name)
 
 	return users[name].Token.Value
 }
@@ -104,7 +118,7 @@ func GetNameFromToken(token string) string {
 
 func writeAPIToken(name string) string {
 	encodedToken := APIToken{
-		ApiVersion: "client.authentication.k8s.io/v1beta1",
+		APIVersion: "client.authentication.k8s.io/v1beta1",
 		Kind:       "ExecCredential",
 	}
 	encodedToken.Status = make(map[string]string)
@@ -117,4 +131,45 @@ func writeAPIToken(name string) string {
 		log.Println(err)
 	}
 	return string(content)
+}
+
+func split(in string) []string {
+	return strings.FieldsFunc(in, func(c rune) bool {
+		return c == ' ' || c == ','
+	})
+}
+
+// GetGroups queries the API for a group list and
+// adds a slice of strings as a list of groups to the user.
+func GetGroups(name string) {
+	var GenRes GenericHeader
+	config.API.Get("/api/v1/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
+	if groupsString, ok := GenRes.Metadata.Annotations["groups"]; ok {
+		user := users[name]
+		grouplist := split(groupsString)
+		user.Groups = &grouplist
+		users[name] = user
+	}
+}
+
+// CheckKey checks an ssh public key for name against the api objects public key
+func CheckKey(name string, key ssh.PublicKey) bool {
+
+	var GenRes GenericHeader
+	var sshKey string
+
+	config.API.Get("/api/v1/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
+
+	if t, ok := GenRes.Metadata.Annotations["ssh"]; ok {
+		sshKey = t
+	}
+	// log.Println("request: ","/api/v1/namespaces/"+config.Api.namespace+"/"+config.ResourceType+"/"+ name)
+
+	if len(sshKey) > 0 {
+		pubkey, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(sshKey))
+		if string(key.Marshal()) == string(pubkey.Marshal()) {
+			return true
+		}
+	}
+	return false
 }

@@ -31,7 +31,7 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 
 	//log.Printf("upgrade REQ [%s] [%s] [%s]\n", name, req.Method, req.URL.Path)
 
-	destConn, err := tls.Dial("tcp", config.Api.dest, config.TlsConfig)
+	destConn, err := tls.Dial("tcp", config.API.dest, config.TLSConfig)
 
 	if err != nil {
 		log.Println(err)
@@ -41,16 +41,29 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 
 	connectHeader := make(http.Header)
 
+	// depending on the operating mode we need to give
+	// the appropriate headers to the API server.
 	switch config.OperationMode {
-	case "serviceaccount": // TODO, give the SA token
+	case "serviceaccount": // Give the SA token
 		connectHeader.Set("Authorization", SATokens[name])
 	case "proxy":
-		//connectHeader.Set("Authorization", config.Api.bearer)
+		// set appropriate headers
 		connectHeader.Set("X-Remote-User", name)
-		connectHeader.Set("X-Remote-Group", name)
+		//log.Println("groups for ", name, " are ", users[name].Groups)
+		if users[name].Groups != nil {
+			for _, group := range *users[name].Groups {
+				//log.Println("setgroup for ", name, ":", group)
+				connectHeader.Set("X-Remote-Group", group)
+			}
+		}
 	default: //  "impersonate"
-		connectHeader.Set("Authorization", config.Api.bearer)
+		connectHeader.Set("Authorization", config.API.bearer)
 		connectHeader.Set("Impersonate-User", name)
+		if users[name].Groups != nil {
+			for _, group := range *users[name].Groups {
+				connectHeader.Set("Impersonate-Group", group)
+			}
+		}
 	}
 
 	connectHeader.Set("X-Forwarded-For", req.RemoteAddr)
@@ -65,8 +78,8 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 
 	connectReq := &http.Request{
 		Method: req.Method,
-		URL:    &url.URL{Opaque: config.Api.base + req.URL.Path + "?" + req.URL.RawQuery},
-		Host:   config.Api.dest,
+		URL:    &url.URL{Opaque: config.API.base + req.URL.Path + "?" + req.URL.RawQuery},
+		Host:   config.API.dest,
 		Header: connectHeader,
 	}
 

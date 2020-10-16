@@ -1,4 +1,4 @@
-{{- if .Values.serviceAccount.create -}}
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -6,10 +6,25 @@ metadata:
   labels:
     {{- include "ssh-gateway.labels" . | nindent 4 }}
 rules:
+{{ $mode := .Values.mode | default "impersonate" }}
+{{ if eq $mode "serviceaccount" }}
 - apiGroups: [""]
   resources: ["serviceaccounts"]
-  verbs: ["get", "watch", "list"]
+  verbs: ["get", "list"]
 - apiGroups: [""]
   resources: ["secrets"]
-  verbs: ["*"]
+  verbs: ["get"]
+{{ else }}{{ if eq $mode "proxy" }}
+- apiGroups: [""]
+  resources: [ "{{ .Values.resourceType | default "serviceaccount" }}" ]
+  verbs: ["get"]
+{{ else }}
+- apiGroups: [""]
+  resources: [ "{{ .Values.resourceType | default "serviceaccount" }}" ]
+  verbs: ["get"]
+{{ end }}
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: [ "{{ .Values.secretName | default "" }}" ]
+  verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
 {{- end }}
