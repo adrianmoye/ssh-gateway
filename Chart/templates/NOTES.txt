@@ -6,7 +6,10 @@ Add a new service account:
 kubectl create sa -n {{ .Release.Namespace }} <username>
 
 and annotate the username with their ssh key:
-kubectl annotate -n {{ .Release.Namespace }} --overwrite sa <username> ssh="ssh-rsa AAAAB3NzaC1yc...."
+kubectl annotate -n {{ .Release.Namespace }} --overwrite \
+	sa <username> \
+	ssh="ssh-rsa AAAAB3NzaC1yc...." \
+	groups="system:masters"
 
 ssh {{ .Values.username }}@<hostname> -p<exposed port>
 

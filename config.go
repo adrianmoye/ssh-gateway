@@ -21,6 +21,7 @@ type gwConfig struct {
 	OperationMode string
 	SecretName    string
 	ResourceType  string
+	APIGroup      string
 	CopyHeaders   []string
 	Listener      *sshnet.Listener
 }
@@ -32,12 +33,14 @@ func setupConfig() gwConfig {
 	flagConfigSecret := flag.String("config", "ssh-gateway-config", "Config Secret Name")
 	flagOperatingMode := flag.String("mode", "impersonate", "Operating mode (serviceaccount|proxy|impersonate)")
 	flagResourceType := flag.String("resource", "serviceaccounts", "Resource type for user records")
+	flagAPIGroup := flag.String("apigroup", "v1", "The api group to use")
 	flag.Parse()
 
 	config.Port = *flagPort
 	config.OperationMode = *flagOperatingMode
 	config.SecretName = *flagConfigSecret
 	config.ResourceType = *flagResourceType
+	config.APIGroup = *flagAPIGroup
 
 	config.API = getAPIClientConfig()
 
@@ -111,11 +114,11 @@ func setupConfig() gwConfig {
 	// depending on what mode we're in.
 	switch config.OperationMode {
 	case "serviceaccount":
-		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "Impersonate-Group", "Impersonate-User", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
+		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "Impersonate-Group", "Impersonate-User", "TransferEncoding", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
 	case "proxy":
-		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "Impersonate-Group", "Impersonate-User", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
+		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "Impersonate-Group", "Impersonate-User", "TransferEncoding", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
 	default: //  "impersonate"
-		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
+		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "TransferEncoding", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
 	}
 
 	return config

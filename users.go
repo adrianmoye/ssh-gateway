@@ -143,7 +143,7 @@ func split(in string) []string {
 // adds a slice of strings as a list of groups to the user.
 func GetGroups(name string) {
 	var GenRes GenericHeader
-	config.API.Get("/api/v1/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
+	config.API.Get("/api/"+config.APIGroup+"/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
 	if groupsString, ok := GenRes.Metadata.Annotations["groups"]; ok {
 		user := users[name]
 		grouplist := split(groupsString)
@@ -158,7 +158,7 @@ func CheckKey(name string, key ssh.PublicKey) bool {
 	var GenRes GenericHeader
 	var sshKey string
 
-	config.API.Get("/api/v1/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
+	config.API.Get("/api/"+config.APIGroup+"/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
 
 	if t, ok := GenRes.Metadata.Annotations["ssh"]; ok {
 		sshKey = t

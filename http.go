@@ -2,7 +2,8 @@ package main
 
 import (
 	"crypto/tls"
-	//"crypto/x509"
+	"io/ioutil"
+
 	"io"
 	"log"
 	"net/http"
@@ -30,14 +31,6 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("REQ [%s][%s] [%s] [%s]", req.RemoteAddr, name, req.Method, req.URL.Path)
 
 	//log.Printf("upgrade REQ [%s] [%s] [%s]\n", name, req.Method, req.URL.Path)
-
-	destConn, err := tls.Dial("tcp", config.API.dest, config.TLSConfig)
-
-	if err != nil {
-		log.Println(err)
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-		return
-	}
 
 	connectHeader := make(http.Header)
 
@@ -76,6 +69,55 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	// set default proxying mode, and use this unless
+	// they kubectl is trying to upgrade the connection.
+	if _, ok := req.Header["Upgrade"]; !ok {
+
+		connectReq := &http.Request{
+			Method: req.Method,
+			URL: &url.URL{Scheme: req.URL.Scheme,
+				Host:     config.API.host + ":" + config.API.port,
+				Path:     req.URL.Path,
+				RawPath:  req.URL.RawPath,
+				RawQuery: req.URL.RawQuery,
+				Opaque:   config.API.base + req.URL.Path + "?" + req.URL.RawQuery},
+
+			Host:   config.API.dest,
+			Header: connectHeader,
+			Body:   req.Body,
+		}
+		transport := &http.Transport{TLSClientConfig: config.TLSConfig}
+		client := &http.Client{Transport: transport}
+		newResp, err := client.Do(connectReq)
+		if err != nil {
+			log.Println("Req to API error", err)
+		}
+
+		for h := range newResp.Header {
+			if val, ok := newResp.Header[h]; ok {
+				for i := range val {
+					w.Header().Add(h, val[i])
+				}
+			}
+		}
+
+		data, err := ioutil.ReadAll(newResp.Body)
+		if err != nil {
+			log.Println(err)
+		}
+		w.Write(data)
+
+		return
+	}
+
+	destConn, err := tls.Dial("tcp", config.API.dest, config.TLSConfig)
+
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
 	connectReq := &http.Request{
 		Method: req.Method,
 		URL:    &url.URL{Opaque: config.API.base + req.URL.Path + "?" + req.URL.RawQuery},
@@ -88,7 +130,6 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 		destConn.Close()
 		return
 	}
-
 	//fmt.Println("Hijacking")
 
 	hijacker, ok := w.(http.Hijacker)
