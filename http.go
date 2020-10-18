@@ -2,9 +2,8 @@ package main
 
 import (
 	"crypto/tls"
-	"io/ioutil"
-
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -15,20 +14,26 @@ import (
 
 // ProxyHandler provides the handler for ssh channel requests
 // Arguments are handler func(ResponseWriter, *Request)
-func ProxyHandler(w http.ResponseWriter, req *http.Request) {
+func ProxyHandler(sshWriter http.ResponseWriter, sshReq *http.Request) {
 
 	// lets do the auth stuff
-	token := regexp.MustCompilePOSIX("Bearer ").ReplaceAllString(req.Header["Authorization"][0], "")
-	//log.Printf(" user token\n[%s]\n[%s]\n",t,token)
-	record := GetNameFromToken(token)
-	if !(len(record) > 0) {
-		log.Printf("FAILED REQ [%s][%s] [%s] [%s]\n", "UNKNOWN", req.RemoteAddr, req.Method, req.URL.Path)
-		// TODO: handle failure better
+	var userToken string
+	if token, ok := sshReq.Header["Authorization"]; ok {
+		userToken = regexp.MustCompilePOSIX("Bearer ").ReplaceAllString(token[0], "")
+	} else {
+		http.Error(sshWriter, "Unauthorized", http.StatusUnauthorized)
+		log.Printf("FAILED REQ [%s][%s] [%s] [%s]\n", "UNKNOWN", sshReq.RemoteAddr, sshReq.Method, sshReq.URL.Path)
 		return
 	}
-	name := record
+	//log.Printf(" user token\n[%s]\n[%s]\n",t,token)
+	name := GetNameFromToken(userToken)
+	if !(len(name) > 0) {
+		http.Error(sshWriter, "Unauthorized", http.StatusUnauthorized)
+		log.Printf("FAILED REQ [%s][%s] [%s] [%s]\n", "UNKNOWN", sshReq.RemoteAddr, sshReq.Method, sshReq.URL.Path)
+		return
+	}
 
-	log.Printf("REQ [%s][%s] [%s] [%s]", req.RemoteAddr, name, req.Method, req.URL.Path)
+	log.Printf("REQ [%s][%s] [%s] [%s]", sshReq.RemoteAddr, name, sshReq.Method, sshReq.URL.Path)
 
 	//log.Printf("upgrade REQ [%s] [%s] [%s]\n", name, req.Method, req.URL.Path)
 
@@ -59,101 +64,106 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	connectHeader.Set("X-Forwarded-For", req.RemoteAddr)
+	connectHeader.Set("X-Forwarded-For", sshReq.RemoteAddr)
 	connectHeader.Set("Connection", "close")
 	for _, h := range config.CopyHeaders {
-		if val, ok := req.Header[h]; ok {
+		if val, ok := sshReq.Header[h]; ok {
 			for i := range val {
-				connectHeader.Set(h, val[i])
+				connectHeader.Add(h, val[i])
 			}
 		}
 	}
 
 	// set default proxying mode, and use this unless
 	// they kubectl is trying to upgrade the connection.
-	if _, ok := req.Header["Upgrade"]; !ok {
+	if _, ok := sshReq.Header["Upgrade"]; !ok {
 
-		connectReq := &http.Request{
-			Method: req.Method,
-			URL: &url.URL{Scheme: req.URL.Scheme,
-				Host:     config.API.host + ":" + config.API.port,
-				Path:     req.URL.Path,
-				RawPath:  req.URL.RawPath,
-				RawQuery: req.URL.RawQuery,
-				Opaque:   config.API.base + req.URL.Path + "?" + req.URL.RawQuery},
-
+		apiRequest := &http.Request{
+			Method: sshReq.Method,
+			URL: &url.URL{
+				Scheme: "https",
+				Host:   config.API.host + ":" + config.API.port,
+				Path:   sshReq.URL.Path,
+				//RawPath:  sshReq.URL.RawPath,
+				RawQuery: sshReq.URL.RawQuery,
+				//Opaque: config.API.base + sshReq.URL.Path + "?" + sshReq.URL.RawQuery,
+			},
 			Host:   config.API.dest,
 			Header: connectHeader,
-			Body:   req.Body,
+			Body:   sshReq.Body,
 		}
 		transport := &http.Transport{TLSClientConfig: config.TLSConfig}
 		client := &http.Client{Transport: transport}
-		newResp, err := client.Do(connectReq)
+		apiResponse, err := client.Do(apiRequest)
 		if err != nil {
 			log.Println("Req to API error", err)
+			http.Error(sshWriter, err.Error(), http.StatusServiceUnavailable)
+			return
 		}
 
-		for h := range newResp.Header {
-			if val, ok := newResp.Header[h]; ok {
+		for h := range apiResponse.Header {
+			if val, ok := apiResponse.Header[h]; ok {
 				for i := range val {
-					w.Header().Add(h, val[i])
+					sshWriter.Header().Add(h, val[i])
 				}
 			}
 		}
 
-		data, err := ioutil.ReadAll(newResp.Body)
+		data, err := ioutil.ReadAll(apiResponse.Body)
 		if err != nil {
 			log.Println(err)
 		}
-		w.Write(data)
+
+		sshWriter.Write(data)
 
 		return
 	}
 
-	destConn, err := tls.Dial("tcp", config.API.dest, config.TLSConfig)
+	apiConn, err := tls.Dial("tcp", config.API.dest, config.TLSConfig)
 
 	if err != nil {
 		log.Println(err)
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		http.Error(sshWriter, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 
-	connectReq := &http.Request{
-		Method: req.Method,
-		URL:    &url.URL{Opaque: config.API.base + req.URL.Path + "?" + req.URL.RawQuery},
+	apiRequest := &http.Request{
+		Method: sshReq.Method,
+		URL:    &url.URL{Opaque: config.API.base + sshReq.URL.Path + "?" + sshReq.URL.RawQuery},
 		Host:   config.API.dest,
 		Header: connectHeader,
 	}
 
-	if err := connectReq.Write(destConn); err != nil {
+	if err := apiRequest.Write(apiConn); err != nil {
 		log.Println(err)
-		destConn.Close()
+		apiConn.Close()
 		return
 	}
 	//fmt.Println("Hijacking")
 
-	hijacker, ok := w.(http.Hijacker)
+	hijacker, ok := sshWriter.(http.Hijacker)
 	if !ok {
 		log.Println(err)
-		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
+		http.Error(sshWriter, "Hijacking not supported", http.StatusInternalServerError)
 		return
 	}
 	//fmt.Println("getting client con")
-	clientConn, _, err := hijacker.Hijack()
+	sshConn, _, err := hijacker.Hijack()
 	if err != nil {
 		log.Println(err)
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		http.Error(sshWriter, err.Error(), http.StatusServiceUnavailable)
+		return
 	}
 	//log.Println("going to transfer mode")
 
 	waitfor := make(chan bool)
 
 	go func() {
-		io.Copy(destConn, clientConn)
+		io.Copy(apiConn, sshConn)
 		waitfor <- true
 	}()
 	go func() {
-		io.Copy(clientConn, destConn)
+		io.Copy(sshConn, apiConn)
 		waitfor <- true
 	}()
 
@@ -162,8 +172,8 @@ func ProxyHandler(w http.ResponseWriter, req *http.Request) {
 	<-waitfor
 	close(waitfor)
 
-	clientConn.Close()
-	destConn.Close()
+	sshConn.Close()
+	apiConn.Close()
 
 	//log.Println("closed")
 

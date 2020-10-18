@@ -92,7 +92,7 @@ case "$1" in
 		# we use the context name for both the user and server
 		# names
 		CLUSTERNAME="$1"
-		CONTEXT="${USERNAME}-${CLUSTERNAME}"
+		CONTEXT="${CLUSTERNAME}"
 		echo "Configuring cluster and adding context: ${CONTEXT}"
 		# generate random unused port - sorry, this is for us
 		# to use for ssh to forward a local tcp port to the

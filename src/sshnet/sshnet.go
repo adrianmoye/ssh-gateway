@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/prometheus/client_golang/prometheus"
+	//"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Debug make true to log debug messages
@@ -20,6 +23,75 @@ func (d Debug) Println(v ...interface{}) {
 }
 
 var debug Debug = false
+
+var (
+	metricsAccept = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "netssh",
+			Name:      "accepts",
+			Help:      "Number of accepted connections by listener",
+		})
+)
+
+// The Metrics that the module produces
+type Metrics struct {
+	Accept        prometheus.Counter
+	Close         prometheus.Counter
+	Dialer        prometheus.Counter
+	BytesRead     prometheus.Counter
+	BytesWrittern prometheus.Counter
+}
+
+func newMetrics() (ret Metrics) {
+	ret = Metrics{
+		Accept: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "netssh",
+				Name:      "accept_counter",
+				Help:      "Number of accepted connections by listener",
+			}),
+
+		BytesRead: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "netssh",
+				Name:      "bytesread_counter",
+				Help:      "Number of bytes read from the virtual interface",
+			}),
+
+		BytesWrittern: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "netssh",
+				Name:      "byteswrittern_counter",
+				Help:      "Number of bytes writtern from the virtual interface",
+			}),
+
+		Close: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "netssh",
+				Name:      "close_counter",
+				Help:      "Number of connections closed",
+			}),
+
+		Dialer: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "netssh",
+				Name:      "dialer_counter",
+				Help:      "Number of connections dialed in",
+			}),
+	}
+
+	prometheus.MustRegister(ret.Accept)
+	prometheus.MustRegister(ret.BytesRead)
+	prometheus.MustRegister(ret.BytesWrittern)
+	prometheus.MustRegister(ret.Close)
+	prometheus.MustRegister(ret.Dialer)
+
+	// Add Go module build info.
+	prometheus.MustRegister(prometheus.NewBuildInfoCollector())
+	return
+}
+
+var met Metrics = newMetrics()
 
 // Addr local sshnet address type
 type Addr struct {
@@ -108,6 +180,7 @@ func (c *Conn) Read(retBuf []byte) (int, error) {
 
 			c.readNextChunk = c.readNextChunk[len(retBuf):]
 
+			met.BytesRead.Add(float64(len(retBuf)))
 			return len(retBuf), nil
 
 		}
@@ -117,6 +190,7 @@ func (c *Conn) Read(retBuf []byte) (int, error) {
 		copy(retBuf, c.readNextChunk)
 		bytesWrittern := len(c.readNextChunk)
 		c.readNextChunk = []byte{}
+		met.BytesRead.Add(float64(bytesWrittern))
 		return bytesWrittern, nil
 
 	}
@@ -141,6 +215,8 @@ func (c *Conn) Read(retBuf []byte) (int, error) {
 			copy(retBuf, buff[:len(retBuf)])
 			c.readNextChunk = buff[len(retBuf):]
 			c.reader.Finish()
+
+			met.BytesRead.Add(float64(len(retBuf)))
 			return len(retBuf), nil
 
 		}
@@ -149,6 +225,7 @@ func (c *Conn) Read(retBuf []byte) (int, error) {
 		debug.Println("Read called read2:", len(retBuf))
 		copy(retBuf, buff)
 		c.reader.Finish()
+		met.BytesRead.Add(float64(len(buff)))
 		return len(buff), nil
 
 	case <-c.reader.SigTimout:
@@ -171,6 +248,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 		debug.Println("Write finished bytes:", len(buff))
 		c.writer.Finish()
+		met.BytesWrittern.Add(float64(len(buff)))
 		return len(buff), nil
 	case <-c.writer.SigTimout:
 
@@ -270,6 +348,7 @@ func (c *Conn) buffereWriter() {
 			return
 		}
 
+		// bug here, what if we don't write all of the buffer :-/ eek sorry
 		debug.Println("buffered writer received ", len(buff))
 		n, err := c.client.Write(buff)
 
@@ -327,6 +406,7 @@ func (l *Listener) Accept() (net.Conn, error) {
 
 	debug.Println("accept")
 	conn, _ := <-l.connQueue
+	met.Accept.Add(1)
 	/*
 		if err {
 			return nil, os.ErrClosed
@@ -337,6 +417,8 @@ func (l *Listener) Accept() (net.Conn, error) {
 
 // Close  the receive listener channel
 func (l *Listener) Close() error {
+
+	met.Close.Add(1)
 	//l.closed = true
 	//close(l.connQueue)
 	return nil
@@ -353,6 +435,8 @@ func (l *Listener) Dialer(sshConn *ssh.ServerConn, client ssh.Channel) {
 	debug.Println("doing put connection on listen queue")
 	debug.Println(len(l.connQueue), cap(l.connQueue))
 	l.connQueue <- &conn
+
+	met.Dialer.Add(1)
 
 	debug.Println("done put connection on listen queue")
 }

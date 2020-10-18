@@ -9,8 +9,8 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// HELP_TEMPLATE default sshd server text
-var HELP_TEMPLATE = `Kubernetes ssh gateway, to use install the kubectl plugin:
+// helpTextTexplate default sshd server text
+var helpTextTexplate = `Kubernetes ssh gateway, to use install the kubectl plugin:
   
   ssh <user@host> plugin > kubectl-ssh
   chmod 755 kubectl-ssh
@@ -155,7 +155,7 @@ func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 		return
 	}
 
-	help := regexp.MustCompilePOSIX("\\n").ReplaceAllString(HELP_TEMPLATE, "\r\n")
+	help := regexp.MustCompilePOSIX("\\n").ReplaceAllString(helpTextTexplate, "\r\n")
 	name := client.Permissions.CriticalOptions["name"]
 
 	for req := range requests {

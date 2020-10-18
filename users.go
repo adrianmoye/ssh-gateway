@@ -12,11 +12,11 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// TOKEN_LIFE the lifetime of proxy tokens we create
-const TOKEN_LIFE = 30 * time.Minute
+// TOKENLIFE the lifetime of proxy tokens we create
+const TOKENLIFE = 30 * time.Minute
 
-// TOKEN_REFRESH how long before expiry a token can be refreshed
-const TOKEN_REFRESH = 10 * time.Minute
+// TOKENREFRESH how long before expiry a token can be refreshed
+const TOKENREFRESH = 10 * time.Minute
 
 // APIToken structured format for JSON api token
 type APIToken struct {
@@ -57,7 +57,7 @@ func genToken() (ret Token) {
 	_, _ = rand.Read(buf)
 	ret.Value = b64(string(buf))
 	// default expiry time
-	ret.Expire = time.Now().Add(TOKEN_LIFE)
+	ret.Expire = time.Now().Add(TOKENLIFE)
 	return
 }
 
@@ -76,7 +76,7 @@ func GetToken(name string) string {
 	}
 
 	// rotate tokens if they're about to expire within the refresh window
-	if users[name].Token.Expire.Before(time.Now().Add(TOKEN_REFRESH)) {
+	if users[name].Token.Expire.Before(time.Now().Add(TOKENREFRESH)) {
 		// delete the old token from the tokens list
 		delete(tokens, users[name].OldToken.Value)
 		user := users[name]
@@ -143,7 +143,7 @@ func split(in string) []string {
 // adds a slice of strings as a list of groups to the user.
 func GetGroups(name string) {
 	var GenRes GenericHeader
-	config.API.Get("/api/"+config.APIGroup+"/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
+	config.API.Get("/api"+config.APIGroup+"/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
 	if groupsString, ok := GenRes.Metadata.Annotations["groups"]; ok {
 		user := users[name]
 		grouplist := split(groupsString)
@@ -158,8 +158,8 @@ func CheckKey(name string, key ssh.PublicKey) bool {
 	var GenRes GenericHeader
 	var sshKey string
 
-	config.API.Get("/api/"+config.APIGroup+"/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
-
+	config.API.Get("/api"+config.APIGroup+"/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
+	log.Println("Querying user", "/api"+config.APIGroup+"/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name)
 	if t, ok := GenRes.Metadata.Annotations["ssh"]; ok {
 		sshKey = t
 	}

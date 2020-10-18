@@ -33,7 +33,7 @@ func setupConfig() gwConfig {
 	flagConfigSecret := flag.String("config", "ssh-gateway-config", "Config Secret Name")
 	flagOperatingMode := flag.String("mode", "impersonate", "Operating mode (serviceaccount|proxy|impersonate)")
 	flagResourceType := flag.String("resource", "serviceaccounts", "Resource type for user records")
-	flagAPIGroup := flag.String("apigroup", "v1", "The api group to use")
+	flagAPIGroup := flag.String("apigroup", "/v1", "The api group to use, for crds you should start it \"s/example.com/v1\"")
 	flag.Parse()
 
 	config.Port = *flagPort
