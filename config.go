@@ -10,14 +10,16 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/adrianmoye/ssh-gateway/src/api"
+	"github.com/adrianmoye/ssh-gateway/src/gencert"
 	"github.com/adrianmoye/ssh-gateway/src/sshnet"
+	"github.com/adrianmoye/ssh-gateway/src/sshserver"
 )
 
 type gwConfig struct {
 	API           api.Config
 	Port          string
 	SSH           *ssh.ServerConfig
-	ProxyCert     RawPEM
+	ProxyCert     gencert.RawPEM
 	ProxyCA       string
 	TLSConfig     *tls.Config
 	OperationMode string
@@ -54,15 +56,15 @@ func setupConfig() gwConfig {
 		secret.Data = make(map[string]string)
 	}
 	if _, ok := secret.Data["sshd_key"]; !ok {
-		keys := GenKeys()
+		keys := sshserver.GenKeys()
 		secret.Data["sshd_key"] = base64.StdEncoding.EncodeToString(keys.PrivateKey)
 		updateSecret = true
 	}
 
-	var CA RawPEM
+	var CA gencert.RawPEM
 	if _, ok := secret.Data["ca_cert"]; !ok {
 		log.Println("Regenerating CA Cert")
-		CA = genCA("SSH Gateway CA")
+		CA = gencert.GenCA("SSH Gateway CA")
 		//log.Println(string(CA.Cert))
 		//log.Println(string(CA.Key))
 		secret.Data["ca_cert"] = base64.StdEncoding.EncodeToString([]byte(CA.Cert))
@@ -78,7 +80,7 @@ func setupConfig() gwConfig {
 		log.Fatal(err)
 	}
 	CA.Cert, CA.Key = c, k
-	config.ProxyCert = SignedCert("kubernetes.default", CA)
+	config.ProxyCert = gencert.SignedCert("kubernetes.default", CA)
 
 	if updateSecret {
 		secret.APIVersion = "v1"
@@ -110,7 +112,7 @@ func setupConfig() gwConfig {
 	config.TLSConfig = tlsConfig
 
 	sshdKey, _ := base64.StdEncoding.DecodeString(secret.Data["sshd_key"])
-	config.SSH = genSSHServerConfig(sshdKey)
+	config.SSH = sshserver.GenSSHServerConfig(sshdKey)
 
 	// decide which headers to pass through to the API server
 	// depending on what mode we're in.
