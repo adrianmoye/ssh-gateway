@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"crypto/tls"
@@ -12,16 +12,17 @@ import (
 	"strings"
 )
 
-type apiConfig struct {
-	namespace string
-	host      string
-	port      string
-	token     string
-	ca        string
-	dest      string
-	base      string
-	bearer    string
-	transport *http.Transport
+// Config The API config
+type Config struct {
+	Namespace string
+	Host      string
+	Port      string
+	Token     string
+	CA        string
+	Dest      string
+	Base      string
+	Bearer    string
+	Transport *http.Transport
 }
 
 // Metadata standard metadata k8s structure
@@ -68,7 +69,7 @@ type GenericHeader struct {
 }
 
 // Post a JSON data structure to the API request string
-func (api apiConfig) Post(request string, deliver interface{}) {
+func (api Config) Post(request string, deliver interface{}) {
 
 	content, err := json.Marshal(deliver)
 	if err != nil {
@@ -76,13 +77,13 @@ func (api apiConfig) Post(request string, deliver interface{}) {
 	}
 	length := len(content)
 
-	client := &http.Client{Transport: api.transport}
+	client := &http.Client{Transport: api.Transport}
 	reader := strings.NewReader(string(content))
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", api.base, request), reader)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", api.Base, request), reader)
 	if err != nil {
 		log.Println(err)
 	}
-	req.Header.Add("Authorization", api.bearer)
+	req.Header.Add("Authorization", api.Bearer)
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Content-Length", fmt.Sprintf("%d", length))
 
@@ -104,14 +105,14 @@ func (api apiConfig) Post(request string, deliver interface{}) {
 }
 
 // Get a data structure from the request string
-func (api apiConfig) Get(request string, reply interface{}) {
-	client := &http.Client{Transport: api.transport}
+func (api Config) Get(request string, reply interface{}) {
+	client := &http.Client{Transport: api.Transport}
 
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s%s", api.base, request), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s%s", api.Base, request), nil)
 	if err != nil {
 		log.Println(err)
 	}
-	req.Header.Add("Authorization", api.bearer)
+	req.Header.Add("Authorization", api.Bearer)
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Println(err)
@@ -137,20 +138,21 @@ func readfile(name string) string {
 	return string(v)
 }
 
-func getAPIClientConfig() apiConfig {
-	var config apiConfig
+// ClientConfig Returns the API config
+func ClientConfig() Config {
+	var config Config
 
-	config.host = os.Getenv("KUBERNETES_SERVICE_HOST")
-	config.port = os.Getenv("KUBERNETES_SERVICE_PORT")
-	config.namespace = readfile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-	config.token = readfile("/var/run/secrets/kubernetes.io/serviceaccount/token")
-	config.ca = readfile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+	config.Host = os.Getenv("KUBERNETES_SERVICE_HOST")
+	config.Port = os.Getenv("KUBERNETES_SERVICE_PORT")
+	config.Namespace = readfile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	config.Token = readfile("/var/run/secrets/kubernetes.io/serviceaccount/token")
+	config.CA = readfile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
 
-	config.dest = config.host + ":" + config.port
-	config.base = "https://" + config.dest
-	config.bearer = fmt.Sprintf("Bearer %s", config.token)
+	config.Dest = config.Host + ":" + config.Port
+	config.Base = "https://" + config.Dest
+	config.Bearer = fmt.Sprintf("Bearer %s", config.Token)
 	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM([]byte(config.ca))
+	caCertPool.AppendCertsFromPEM([]byte(config.CA))
 
 	// Setup HTTPS client
 	tlsConfig := &tls.Config{
@@ -158,7 +160,7 @@ func getAPIClientConfig() apiConfig {
 		RootCAs: caCertPool,
 	}
 	tlsConfig.BuildNameToCertificate()
-	config.transport = &http.Transport{TLSClientConfig: tlsConfig}
+	config.Transport = &http.Transport{TLSClientConfig: tlsConfig}
 
 	return config
 }

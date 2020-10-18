@@ -55,7 +55,7 @@ func ProxyHandler(sshWriter http.ResponseWriter, sshReq *http.Request) {
 			}
 		}
 	default: //  "impersonate"
-		connectHeader.Set("Authorization", config.API.bearer)
+		connectHeader.Set("Authorization", config.API.Bearer)
 		connectHeader.Set("Impersonate-User", name)
 		if users[name].Groups != nil {
 			for _, group := range *users[name].Groups {
@@ -82,13 +82,13 @@ func ProxyHandler(sshWriter http.ResponseWriter, sshReq *http.Request) {
 			Method: sshReq.Method,
 			URL: &url.URL{
 				Scheme: "https",
-				Host:   config.API.host + ":" + config.API.port,
+				Host:   config.API.Dest,
 				Path:   sshReq.URL.Path,
 				//RawPath:  sshReq.URL.RawPath,
 				RawQuery: sshReq.URL.RawQuery,
 				//Opaque: config.API.base + sshReq.URL.Path + "?" + sshReq.URL.RawQuery,
 			},
-			Host:   config.API.dest,
+			Host:   config.API.Dest,
 			Header: connectHeader,
 			Body:   sshReq.Body,
 		}
@@ -119,7 +119,7 @@ func ProxyHandler(sshWriter http.ResponseWriter, sshReq *http.Request) {
 		return
 	}
 
-	apiConn, err := tls.Dial("tcp", config.API.dest, config.TLSConfig)
+	apiConn, err := tls.Dial("tcp", config.API.Dest, config.TLSConfig)
 
 	if err != nil {
 		log.Println(err)
@@ -129,8 +129,8 @@ func ProxyHandler(sshWriter http.ResponseWriter, sshReq *http.Request) {
 
 	apiRequest := &http.Request{
 		Method: sshReq.Method,
-		URL:    &url.URL{Opaque: config.API.base + sshReq.URL.Path + "?" + sshReq.URL.RawQuery},
-		Host:   config.API.dest,
+		URL:    &url.URL{Opaque: config.API.Base + sshReq.URL.Path + "?" + sshReq.URL.RawQuery},
+		Host:   config.API.Dest,
 		Header: connectHeader,
 	}
 

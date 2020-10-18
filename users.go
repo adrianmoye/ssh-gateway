@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/adrianmoye/ssh-gateway/src/api"
 )
 
 // TOKENLIFE the lifetime of proxy tokens we create
@@ -87,11 +89,11 @@ func GetToken(name string) string {
 	}
 
 	if config.OperationMode == "serviceaccount" {
-		var SA Serviceaccount
+		var SA api.Serviceaccount
 
-		var secret Secret
-		config.API.Get("/api/v1/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &SA)
-		config.API.Get(fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", config.API.namespace, SA.Secrets[0].Name), &secret)
+		var secret api.Secret
+		config.API.Get("/api/v1/namespaces/"+config.API.Namespace+"/"+config.ResourceType+"/"+name, &SA)
+		config.API.Get(fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", config.API.Namespace, SA.Secrets[0].Name), &secret)
 		saToken, _ := base64.StdEncoding.DecodeString(secret.Data["token"])
 		SATokens[name] = "Bearer " + string(saToken)
 	}
@@ -142,8 +144,8 @@ func split(in string) []string {
 // GetGroups queries the API for a group list and
 // adds a slice of strings as a list of groups to the user.
 func GetGroups(name string) {
-	var GenRes GenericHeader
-	config.API.Get("/api"+config.APIGroup+"/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
+	var GenRes api.GenericHeader
+	config.API.Get("/api"+config.APIGroup+"/namespaces/"+config.API.Namespace+"/"+config.ResourceType+"/"+name, &GenRes)
 	if groupsString, ok := GenRes.Metadata.Annotations["groups"]; ok {
 		user := users[name]
 		grouplist := split(groupsString)
@@ -155,11 +157,11 @@ func GetGroups(name string) {
 // CheckKey checks an ssh public key for name against the api objects public key
 func CheckKey(name string, key ssh.PublicKey) bool {
 
-	var GenRes GenericHeader
+	var GenRes api.GenericHeader
 	var sshKey string
 
-	config.API.Get("/api"+config.APIGroup+"/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name, &GenRes)
-	log.Println("Querying user", "/api"+config.APIGroup+"/namespaces/"+config.API.namespace+"/"+config.ResourceType+"/"+name)
+	config.API.Get("/api"+config.APIGroup+"/namespaces/"+config.API.Namespace+"/"+config.ResourceType+"/"+name, &GenRes)
+	log.Println("Querying user", "/api"+config.APIGroup+"/namespaces/"+config.API.Namespace+"/"+config.ResourceType+"/"+name)
 	if t, ok := GenRes.Metadata.Annotations["ssh"]; ok {
 		sshKey = t
 	}

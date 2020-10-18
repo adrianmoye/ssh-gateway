@@ -7,12 +7,14 @@ import (
 	"flag"
 	"log"
 
-	"github.com/adrianmoye/ssh-gateway/src/sshnet"
 	"golang.org/x/crypto/ssh"
+
+	"github.com/adrianmoye/ssh-gateway/src/api"
+	"github.com/adrianmoye/ssh-gateway/src/sshnet"
 )
 
 type gwConfig struct {
-	API           apiConfig
+	API           api.Config
 	Port          string
 	SSH           *ssh.ServerConfig
 	ProxyCert     RawPEM
@@ -42,12 +44,12 @@ func setupConfig() gwConfig {
 	config.ResourceType = *flagResourceType
 	config.APIGroup = *flagAPIGroup
 
-	config.API = getAPIClientConfig()
+	config.API = api.ClientConfig()
 
-	var secret Secret
+	var secret api.Secret
 
 	var updateSecret bool = false
-	config.API.Get("/api/v1/namespaces/"+config.API.namespace+"/secrets/"+config.SecretName, &secret)
+	config.API.Get("/api/v1/namespaces/"+config.API.Namespace+"/secrets/"+config.SecretName, &secret)
 	if secret.Data == nil {
 		secret.Data = make(map[string]string)
 	}
@@ -82,15 +84,15 @@ func setupConfig() gwConfig {
 		secret.APIVersion = "v1"
 		secret.Kind = "Secret"
 		secret.Metadata.Name = config.SecretName
-		secret.Metadata.Namespace = config.API.namespace
+		secret.Metadata.Namespace = config.API.Namespace
 		secret.Metadata.Labels = make(map[string]string)
-		config.API.Post("/api/v1/namespaces/"+config.API.namespace+"/secrets", &secret)
+		config.API.Post("/api/v1/namespaces/"+config.API.Namespace+"/secrets", &secret)
 		log.Printf("Created secret with keys: [%s]\n", config.SecretName)
 	}
 
 	// now we have the server cert
 	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM([]byte(config.API.ca))
+	caCertPool.AppendCertsFromPEM([]byte(config.API.CA))
 
 	//log.Println("keycert:", ProxyCert)
 	cert, err := tls.X509KeyPair(config.ProxyCert.Cert, config.ProxyCert.Key)
