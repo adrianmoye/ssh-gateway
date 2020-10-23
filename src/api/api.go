@@ -27,11 +27,12 @@ type Config struct {
 
 // Metadata standard metadata k8s structure
 type Metadata struct {
-	Name          string            `json:"name"`
-	Namespace     string            `json:"namespace"`
-	Labels        map[string]string `json:"labels"`
-	Annotations   map[string]string `json:"annotations"`
-	ManagedFields []interface{}     `json:"managedFields"`
+	Name            string            `json:"name"`
+	Namespace       string            `json:"namespace"`
+	Labels          map[string]string `json:"labels"`
+	Annotations     map[string]string `json:"annotations"`
+	ManagedFields   []interface{}     `json:"managedFields"`
+	ResourceVersion string            `json:"resourceVersion"`
 }
 
 // Secret standard structure of a k8s secret
@@ -124,7 +125,7 @@ func (api Config) Get(request string, reply interface{}) {
 	}
 	err = json.Unmarshal(content, reply)
 	if err != nil {
-		log.Println(err)
+		log.Println("unmarshal error", err)
 	}
 }
 

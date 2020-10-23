@@ -8,6 +8,8 @@ import (
 
 	"github.com/adrianmoye/ssh-gateway/src/sshnet"
 	"github.com/adrianmoye/ssh-gateway/src/users"
+
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -38,6 +40,44 @@ type Config struct {
 
 var config Config
 
+// The Metrics that the module produces
+type Metrics struct {
+	Accept       prometheus.Counter
+	LoginSuccess prometheus.Counter
+	LoginFail    prometheus.Counter
+}
+
+func newMetrics() (ret Metrics) {
+	ret = Metrics{
+		Accept: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "sshserver",
+				Name:      "accept_counter",
+				Help:      "Number of accepted connections by listener",
+			}),
+		LoginSuccess: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "sshserver",
+				Name:      "loginsuccess_counter",
+				Help:      "Number of successful login attempts",
+			}),
+		LoginFail: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "sshserver",
+				Name:      "loginfail_counter",
+				Help:      "Number of failed login attempts",
+			}),
+	}
+
+	prometheus.MustRegister(ret.Accept)
+	prometheus.MustRegister(ret.LoginSuccess)
+	prometheus.MustRegister(ret.LoginFail)
+
+	return
+}
+
+var met Metrics = newMetrics()
+
 // SSHServer the ssh server main listener
 func SSHServer(c Config) {
 	config = c
@@ -47,11 +87,15 @@ func SSHServer(c Config) {
 	if err != nil {
 		log.Fatalf("Failed to listen on %s (%s)", config.Port, err)
 	}
+	go listen(listener)
+}
 
+func listen(l net.Listener) {
 	// Accept all connections
 	log.Printf("Listening on port [%s]...", config.Port)
 	for {
-		tcpConn, err := listener.Accept()
+		tcpConn, err := l.Accept()
+		met.Accept.Add(1)
 		if err != nil {
 			log.Printf("Failed to accept incoming connection (%s)", err)
 			continue
@@ -71,6 +115,7 @@ func GenSSHServerConfig(privateBytes []byte) *ssh.ServerConfig {
 
 			if users.CheckKey(conn.User(), key) {
 				log.Printf("Login: [%s](%s)", conn.User(), conn.RemoteAddr())
+				met.LoginSuccess.Add(1)
 				return &ssh.Permissions{
 					CriticalOptions: map[string]string{
 						"name": conn.User(),
@@ -80,7 +125,7 @@ func GenSSHServerConfig(privateBytes []byte) *ssh.ServerConfig {
 			}
 
 			log.Printf("Failed Login: [%s](%s)", conn.User(), conn.RemoteAddr())
-
+			met.LoginFail.Add(1)
 			return nil, fmt.Errorf("unknown public key")
 
 		},

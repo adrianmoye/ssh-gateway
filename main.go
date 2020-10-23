@@ -21,24 +21,12 @@ func main() {
 	config = setupConfig()
 
 	log.Println("Starting Proxy")
-	config.Listener = proxy.HttpsServer(proxy.Config{
+	config.Listener = proxy.HTTPSServer(proxy.Config{
 		OperationMode: config.OperationMode,
 		CopyHeaders:   config.CopyHeaders,
 		Port:          config.Port,
 		Certs:         config.ProxyCert,
 	})
-
-	log.Println("registering http handler")
-	http.Handle("/metrics", promhttp.HandlerFor(
-		prometheus.DefaultGatherer,
-		promhttp.HandlerOpts{
-			// Opt into OpenMetrics to support exemplars.
-			EnableOpenMetrics: true,
-		},
-	))
-
-	log.Println("Starting metrics server")
-	go func() { log.Fatal(http.ListenAndServe(":4141", nil)) }()
 
 	log.Println("Starting SSH server")
 	sshserver.SSHServer(sshserver.Config{
@@ -47,5 +35,23 @@ func main() {
 		Listener:     *config.Listener,
 		ProxyCA:      config.ProxyCA,
 	})
+
+	// a liveness probe
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+	})
+
+	//log.Println("registering http handler")
+	http.Handle("/metrics", promhttp.HandlerFor(
+		prometheus.DefaultGatherer,
+		promhttp.HandlerOpts{
+			// Opt into OpenMetrics to support exemplars.
+			EnableOpenMetrics: true,
+		},
+	))
+
+	// lets hang on the metrics server
+	log.Println("Starting metrics server")
+	log.Fatal(http.ListenAndServe(":4141", nil))
 
 }

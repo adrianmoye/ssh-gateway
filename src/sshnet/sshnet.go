@@ -9,7 +9,6 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/prometheus/client_golang/prometheus"
-	//"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Debug make true to log debug messages
@@ -23,15 +22,6 @@ func (d Debug) Println(v ...interface{}) {
 }
 
 var debug Debug = false
-
-var (
-	metricsAccept = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Namespace: "netssh",
-			Name:      "accepts",
-			Help:      "Number of accepted connections by listener",
-		})
-)
 
 // The Metrics that the module produces
 type Metrics struct {
@@ -350,12 +340,15 @@ func (c *Conn) buffereWriter() {
 
 		// bug here, what if we don't write all of the buffer :-/ eek sorry
 		debug.Println("buffered writer received ", len(buff))
-		n, err := c.client.Write(buff)
-
-		debug.Println("buffered writer write ", len(buff), n)
-		if err != nil {
-			debug.Println("bufferedWrite client error", err)
-			return
+		pos := 0
+		for pos < len(buff) {
+			n, err := c.client.Write(buff[pos:])
+			pos += n
+			debug.Println("buffered writer write ", len(buff[pos:]), n)
+			if err != nil {
+				debug.Println("bufferedWrite client error", err)
+				return
+			}
 		}
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/adrianmoye/ssh-gateway/src/gencert"
 	"github.com/adrianmoye/ssh-gateway/src/sshnet"
 	"github.com/adrianmoye/ssh-gateway/src/sshserver"
+	"github.com/adrianmoye/ssh-gateway/src/users"
 )
 
 type gwConfig struct {
@@ -45,6 +46,7 @@ func setupConfig() gwConfig {
 	config.SecretName = *flagConfigSecret
 	config.ResourceType = *flagResourceType
 	config.APIGroup = *flagAPIGroup
+	users.ResourceType = config.ResourceType
 
 	config.API = api.ClientConfig()
 
@@ -116,13 +118,14 @@ func setupConfig() gwConfig {
 
 	// decide which headers to pass through to the API server
 	// depending on what mode we're in.
+
 	switch config.OperationMode {
 	case "serviceaccount":
-		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "Impersonate-Group", "Impersonate-User", "TransferEncoding", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
+		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "Impersonate-Group", "Impersonate-User", "TransferEncoding", "Transfer-Encoding", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
 	case "proxy":
-		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "Impersonate-Group", "Impersonate-User", "TransferEncoding", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
+		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "Impersonate-Group", "Impersonate-User", "TransferEncoding", "Transfer-Encoding", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
 	default: //  "impersonate"
-		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "TransferEncoding", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
+		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "TransferEncoding", "Transfer-Encoding", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
 	}
 
 	return config

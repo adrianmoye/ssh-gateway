@@ -20,6 +20,12 @@ const TOKENLIFE = 30 * time.Minute
 // TOKENREFRESH how long before expiry a token can be refreshed
 const TOKENREFRESH = 10 * time.Minute
 
+// ResourceType the type of resource to search for
+var ResourceType = ""
+
+// resourceQuery the value of the resource to search for
+var resourceQuery = ""
+
 // API api client object
 var API = api.ClientConfig()
 
@@ -158,7 +164,8 @@ func split(in string) []string {
 // adds a slice of strings as a list of groups to the user.
 func GetGroups(name string) {
 	var GenRes api.GenericHeader
-	API.Get("/api"+config.APIGroup+"/namespaces/"+API.Namespace+"/"+config.ResourceType+"/"+name, &GenRes)
+	API.Get(getQuery()+"/"+name, &GenRes)
+	//API.Get("/api"+config.APIGroup+"/namespaces/"+API.Namespace+"/"+config.ResourceType+"/"+name, &GenRes)
 	if groupsString, ok := GenRes.Metadata.Annotations["groups"]; ok {
 		user := users[name]
 		grouplist := split(groupsString)
@@ -175,24 +182,72 @@ func GetUser(name string) (user User) {
 	return
 }
 
+type k8sPreferredVersion struct {
+	GroupVersion string `json:"groupVersion"`
+}
+type k8sGroupItem struct {
+	PreferredVersion k8sPreferredVersion `json:"preferredVersion"`
+}
+type k8sGroupList struct {
+	Groups []k8sGroupItem `json:"groups"`
+}
+
+func getQuery() (ret string) {
+
+	if resourceQuery != "" {
+		ret = resourceQuery
+		return
+	}
+
+	// generic structure for querying the api
+	resInterface := make(map[string]interface{})
+	var resList api.GenericHeader
+	var groupsList k8sGroupList
+
+	// start by checking if it's in the default api group
+	ret = "/api/v1/namespaces/" + API.Namespace + "/" + ResourceType
+	API.Get(ret+"/", &resInterface)
+	//log.Println("the object:")
+	//log.Println(resInterface)
+
+	// if we get a 404, we've got to look else where for the api to use
+	if code, ok := resInterface["code"]; ok {
+		if code.(float64) == 404 {
+			ret = "/apis"
+			API.Get(ret+"/", &groupsList)
+			// hmm messy
+			if groupsList.Groups != nil {
+				for group := range groupsList.Groups {
+					ret = "/apis/" + groupsList.Groups[group].PreferredVersion.GroupVersion + "/namespaces/" + API.Namespace + "/" + ResourceType
+					API.Get(ret+"/", &resList)
+					if len(resList.Metadata.ResourceVersion) > 0 {
+						resourceQuery = ret
+						return
+					}
+				}
+			}
+		}
+	}
+	return
+}
+
 // CheckKey checks an ssh public key for name against the api objects public key
 func CheckKey(name string, key ssh.PublicKey) bool {
 
 	var GenRes api.GenericHeader
-	var sshKey string
 
-	API.Get("/api"+config.APIGroup+"/namespaces/"+API.Namespace+"/"+config.ResourceType+"/"+name, &GenRes)
-	log.Println("Querying user", "/api"+config.APIGroup+"/namespaces/"+API.Namespace+"/"+config.ResourceType+"/"+name)
-	if t, ok := GenRes.Metadata.Annotations["ssh"]; ok {
-		sshKey = t
+	API.Get(getQuery()+"/"+name, &GenRes)
+	log.Println("Querying user", getQuery()+"/"+name)
+
+	if sshKey, ok := GenRes.Metadata.Annotations["ssh"]; ok {
+		if len(sshKey) > 0 {
+			pubkey, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(sshKey))
+			if string(key.Marshal()) == string(pubkey.Marshal()) {
+				return true
+			}
+		}
 	}
 	// log.Println("request: ","/api/v1/namespaces/"+Api.namespace+"/"+config.ResourceType+"/"+ name)
 
-	if len(sshKey) > 0 {
-		pubkey, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(sshKey))
-		if string(key.Marshal()) == string(pubkey.Marshal()) {
-			return true
-		}
-	}
 	return false
 }
