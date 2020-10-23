@@ -114,7 +114,7 @@ func GenSSHServerConfig(privateBytes []byte) *ssh.ServerConfig {
 		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 
 			if users.CheckKey(conn.User(), key) {
-				log.Printf("Login: [%s](%s)", conn.User(), conn.RemoteAddr())
+				log.Printf("new connection: [%s@%s]", conn.User(), conn.RemoteAddr())
 				met.LoginSuccess.Add(1)
 				return &ssh.Permissions{
 					CriticalOptions: map[string]string{
@@ -216,13 +216,14 @@ func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 
 	help := regexp.MustCompilePOSIX("\\n").ReplaceAllString(helpTextTexplate, "\r\n")
 	name := client.Permissions.CriticalOptions["name"]
+	idString := "[" + name + "@" + client.RemoteAddr().String() + "]"
 
 	for req := range requests {
 		switch req.Type {
 		case "pty-req":
 		case "env":
 		case "shell":
-			log.Println(name+"@"+client.RemoteAddr().String(), " REQ SHELL HELP")
+			log.Println("help", idString)
 			if len(req.Payload) == 0 {
 				req.Reply(true, nil)
 			} else {
@@ -237,16 +238,16 @@ func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 			cmd := string(req.Payload[4:])
 			switch cmd {
 			case "plugin":
-				log.Println(name+"@"+client.RemoteAddr().String(), " REQ PLUGIN")
+				log.Println("plugin", idString)
 				fmt.Fprintf(connection, "%s", PLUGIN)
 			case "token":
-				log.Println(name+"@"+client.RemoteAddr().String(), " REQ TOKEN")
+				log.Println("token", idString)
 				fmt.Fprintf(connection, users.WriteAPIToken(name))
 			case "login":
-				log.Println(name+"@"+client.RemoteAddr().String(), " REQ LOGIN")
+				log.Println("login", idString)
 				fmt.Fprintf(connection, "%s %s %s %s\n", name, "kubernetes.default:443", "kubernetes.default", config.ProxyCA)
 			default:
-				log.Println(name+"@"+client.RemoteAddr().String(), " REQ COMMAND HELP")
+				log.Println("default help", idString)
 				fmt.Fprintf(connection, help)
 			}
 
@@ -255,7 +256,7 @@ func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 			if req.WantReply {
 				req.Reply(true, nil)
 			}
-			log.Printf("unknown req: [%s][%s]", req.Type, string(req.Payload))
+			log.Printf("unknown request %s [%s][%s]", idString, req.Type, string(req.Payload))
 		}
 
 	}

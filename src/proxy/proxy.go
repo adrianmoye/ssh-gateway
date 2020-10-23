@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/adrianmoye/ssh-gateway/src/api"
 	"github.com/adrianmoye/ssh-gateway/src/gencert"
@@ -51,19 +52,63 @@ type Proxy struct {
 	apiReader    *bufio.Reader
 	clientConn   net.Conn
 	apiConn      net.Conn
+	authToken    string
+	upgrade      bool
+	method       string
+	request      string
+}
+
+func (p Proxy) writeHeader(key, value string) {
+	fmt.Fprintf(p.clientConn, "%s: %s\r\n", key, value)
+}
+
+func (p Proxy) close400() {
+	fmt.Fprintf(p.clientConn, "HTTP/1.1 400 Bad Request\r\n")
+	p.writeHeader("Content-Type", "text/plain; charset=utf-8")
+	p.writeHeader("Connection", "close")
+	fmt.Fprintf(p.clientConn, "\r\n")
+	p.close()
+}
+func (p Proxy) close403(msg string) {
+	message := fmt.Sprintf(`{
+	"kind": "Status",
+	"apiVersion": "v1",
+	"metadata": {},
+	"status": "Failure",
+	"message": "%s",
+	"reason": "Forbidden",
+	"details": {},
+	"code": 403
+}`, msg)
+
+	fmt.Fprintf(p.clientConn, "HTTP/1.1 403 Forbidden\r\n")
+	p.writeHeader("Cache-Control", "no-cache, private")
+	p.writeHeader("Content-Type", "application/json")
+	p.writeHeader("X-Content-Type-Options", "nosniff")
+	p.writeHeader("Date", time.Now().Format(time.RFC1123))
+	p.writeHeader("Content-Length", fmt.Sprintf("%d", len(message)))
+	p.writeHeader("Connection", "close")
+	fmt.Fprintf(p.clientConn, "\r\n")
+	fmt.Fprintf(p.clientConn, message)
+	p.close()
+}
+
+func (p Proxy) close() {
+	p.clientConn.Close()
+	p.apiConn.Close()
 }
 
 func (p Proxy) requestReader() {
 
-	var authToken = ""
-	var upgrade = false
-
 	// start off by reading the first line of the header
 	// this is a standard http header so GET /blah HTTP/1.1
 	header, _ := p.clientReader.ReadString('\n')
-	_, _, _, ok := parseResponseLine(header)
+	meth, req, _, ok := parseResponseLine(header)
+	p.method = meth
+	p.request = req
 	if !ok {
-		debug.Println("cannot parse responseline")
+		Log.Println("cannot parse request [" + p.clientConn.RemoteAddr().String() + "]")
+		p.close400()
 		return
 	}
 	debug.Println("Got request header:", header)
@@ -80,12 +125,12 @@ func (p Proxy) requestReader() {
 			break
 		}
 		if key == "Authorization" {
-			authToken = regexp.MustCompilePOSIX("Bearer ").ReplaceAllString(value, "")
-			debug.Println("Got auth token:", authToken)
+			p.authToken = regexp.MustCompilePOSIX("Bearer ").ReplaceAllString(value, "")
+			debug.Println("Got auth token:", p.authToken)
 			continue
 		}
 		if key == "Upgrade" {
-			upgrade = true
+			p.upgrade = true
 		}
 		// strip headers
 		switch config.OperationMode {
@@ -113,15 +158,21 @@ func (p Proxy) requestReader() {
 		p.apiConn.Write([]byte(header))
 	}
 
-	if authToken == "" {
+	if p.authToken == "" {
 		// todo fix no token
-		debug.Println("FAILED REQ ", "UNKNOWN", p.clientConn.RemoteAddr())
+		Log.Println("UNAUTHORIZED request [" + p.clientConn.RemoteAddr().String() + "] " + p.method + " " + p.request)
+		debug.Println("FAILED REQ ", "UNKNOWN", p.clientConn.RemoteAddr().String())
+
+		p.close403("forbidden: User \\\"system:anonymous\\\" cannot get path \\\"" + p.request + "\\\"")
 		return
 	}
 	//debug.Printf(" user token\n[%s]\n[%s]\n",t,token)
-	name := users.GetNameFromToken(authToken)
+	name := users.GetNameFromToken(p.authToken)
 	if !(len(name) > 0) {
-		debug.Println("FAILED REQ ", "UNKNOWN", p.clientConn.RemoteAddr())
+		Log.Println("UNAUTHORIZED request [" + p.clientConn.RemoteAddr().String() + "] " + p.method + " " + p.request)
+		debug.Println("FAILED REQ ", "UNKNOWN", p.clientConn.RemoteAddr().String())
+
+		p.close403("forbidden: User \"system:anonymous\" cannot get path \"" + p.request + "\"")
 		return
 	}
 
@@ -149,10 +200,15 @@ func (p Proxy) requestReader() {
 			}
 		}
 	}
-	if !upgrade {
+
+	// TODO: don't auto-close, follow the protocol
+	// and allow connection reuse
+	if !p.upgrade {
 		fmt.Fprintf(p.apiConn, "Connection: %s\r\n", "close")
 	}
 	fmt.Fprintf(p.apiConn, "\r\n")
+
+	Log.Println("request [" + p.clientConn.RemoteAddr().String() + "] " + p.method + " " + p.request)
 
 	io.Copy(p.apiConn, p.clientReader)
 
@@ -170,7 +226,7 @@ func newProxyHandler(clientConn net.Conn) {
 	apiConn, err := tls.Dial("tcp", API.Dest, config.TLSConfig)
 	p.apiConn = apiConn
 	if err != nil {
-		debug.Println(err)
+		Log.Println("Error connecting to API server:", err)
 		//http.Error(clientConn, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
@@ -180,19 +236,20 @@ func newProxyHandler(clientConn net.Conn) {
 
 	var wg sync.WaitGroup
 
-	go func() {
+	go func(wg *sync.WaitGroup) {
 		wg.Add(1)
 		defer wg.Done()
 		p.requestReader()
-	}()
-	go func() {
+	}(&wg)
+	go func(wg *sync.WaitGroup) {
 		wg.Add(1)
 		defer wg.Done()
 		p.responseReader()
-	}()
+	}(&wg)
+
 	wg.Wait()
 
-	debug.Println("closing...")
+	//Log.Println("closing...")
 	//clientConn.Close()
 	//apiConn.Close()
 }
