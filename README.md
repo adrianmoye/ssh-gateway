@@ -24,6 +24,7 @@ There are three main modes:
 * The "proxy" mode uses an [Authenticating Proxy](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#authenticating-proxy), and sends the recommended "X-Remote-User" etc headers.
   * supports impersonation
   * requires access its own secret and user records which could be of any type even a CRD in the namespace.
+  * uses certs to authorise any user.
   * more complex to setup.
 
 The client proxies the SSH TCP forwarding channel to a local API proxy which then authenticates the connection, and passes the request onto the API server.
@@ -73,12 +74,12 @@ To use the gateway create a resource with the desired username, and then annotat
     Shared connection to k8s.example.net closed.
 
     $ kubectl ssh user@k8s.example.net -p 2200
-    Configuring cluster and adding context: user-user@k8s.example.net
-    Cluster "user-user@k8s.example.net" set.
-    Property "clusters.user-user@k8s.example.net.certificate-authority-data" set.
-    User "user-user@k8s.example.net" set.
-    Context "user-user@k8s.example.net" modified.
-    Switched to context "user-user@k8s.example.net".
+    Configuring cluster and adding context: user@k8s.example.net
+    Cluster "user@k8s.example.net" set.
+    Property "clusters.user@k8s.example.net.certificate-authority-data" set.
+    User "user@k8s.example.net" set.
+    Context "user@k8s.example.net" modified.
+    Switched to context "user@k8s.example.net".
     
     Done, to test: kubectl cluster-info
 
