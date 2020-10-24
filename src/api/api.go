@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/adrianmoye/ssh-gateway/src/log"
 )
 
 // Config The API config
@@ -74,7 +75,7 @@ func (api Config) Post(request string, deliver interface{}) {
 
 	content, err := json.Marshal(deliver)
 	if err != nil {
-		log.Println(err)
+		log.Info(fmt.Sprint(err), "server")
 	}
 	length := len(content)
 
@@ -82,26 +83,26 @@ func (api Config) Post(request string, deliver interface{}) {
 	reader := strings.NewReader(string(content))
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", api.Base, request), reader)
 	if err != nil {
-		log.Println(err)
+		log.Info(fmt.Sprint(err), "server")
 	}
 	req.Header.Add("Authorization", api.Bearer)
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Content-Length", fmt.Sprintf("%d", length))
 
 	if err != nil {
-		log.Println(err)
+		log.Info(fmt.Sprint(err), "server")
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Println(err)
+		log.Info(fmt.Sprint(err), "server")
 	}
 	content, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Println(err)
+		log.Info(fmt.Sprint(err), "server")
 	}
 	resp.Body.Close()
 	if err != nil {
-		log.Println(err)
+		log.Info(fmt.Sprint(err), "server")
 	}
 }
 
@@ -111,30 +112,31 @@ func (api Config) Get(request string, reply interface{}) {
 
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s%s", api.Base, request), nil)
 	if err != nil {
-		log.Println(err)
+		log.Info(fmt.Sprint(err), "server")
 	}
 	req.Header.Add("Authorization", api.Bearer)
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Println(err)
+		log.Info(fmt.Sprint(err), "server")
 	}
 	content, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		log.Println(err)
+		log.Info(fmt.Sprint(err), "server")
 	}
 	err = json.Unmarshal(content, reply)
 	if err != nil {
-		log.Println("unmarshal error", err)
+		log.Info("unmarshal error "+fmt.Sprint(err), "server")
 	}
 }
 
 func readfile(name string) string {
-	v, e := ioutil.ReadFile(name)
-	if e != nil {
-		log.Println(e)
-		log.Println("Kubernetes pod environment not detected")
-		log.Fatal("access to service account files is required")
+	v, err := ioutil.ReadFile(name)
+	if err != nil {
+		log.Info(fmt.Sprint(err), "server")
+		log.Info("Kubernetes pod environment not detected", "server")
+		log.Info("access to service account files is required", "server")
+		os.Exit(1)
 	}
 	return string(v)
 }

@@ -1,9 +1,10 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 
+	"github.com/adrianmoye/ssh-gateway/src/log"
 	"github.com/adrianmoye/ssh-gateway/src/proxy"
 	"github.com/adrianmoye/ssh-gateway/src/sshserver"
 	"github.com/prometheus/client_golang/prometheus"
@@ -20,16 +21,16 @@ func main() {
 
 	config = setupConfig()
 
-	log.Println("Starting Proxy")
-	config.Listener = proxy.HTTPSServer(proxy.Config{
+	log.Info("Starting Proxy", "server")
+	config.Listener = proxy.Server(proxy.Config{
 		OperationMode: config.OperationMode,
-		CopyHeaders:   config.CopyHeaders,
+		SkipHeaders:   config.SkipHeaders,
 		Port:          config.Port,
 		Certs:         config.ProxyCert,
 	})
 
-	log.Println("Starting SSH server")
-	sshserver.SSHServer(sshserver.Config{
+	log.Info("Starting SSH server", "server")
+	sshserver.Server(sshserver.Config{
 		Port:         config.Port,
 		ServerConfig: config.SSH,
 		Listener:     *config.Listener,
@@ -51,7 +52,7 @@ func main() {
 	))
 
 	// lets hang on the metrics server
-	log.Println("Starting metrics server")
-	log.Fatal(http.ListenAndServe(":4141", nil))
+	log.Info("Starting metrics server", "server")
+	log.Info(fmt.Sprint(http.ListenAndServe(":4141", nil)), "server")
 
 }

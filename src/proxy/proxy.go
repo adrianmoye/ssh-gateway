@@ -6,16 +6,16 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"log"
-	Log "log"
+	"os"
+
 	"net"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/adrianmoye/ssh-gateway/src/api"
 	"github.com/adrianmoye/ssh-gateway/src/gencert"
+	"github.com/adrianmoye/ssh-gateway/src/log"
 	"github.com/adrianmoye/ssh-gateway/src/sshnet"
 	"github.com/adrianmoye/ssh-gateway/src/users"
 )
@@ -23,7 +23,7 @@ import (
 // Config provides proxy config options
 type Config struct {
 	OperationMode string
-	CopyHeaders   []string
+	SkipHeaders   []string
 	Port          string
 	Certs         gencert.RawPEM
 	TLSConfig     *tls.Config
@@ -33,18 +33,6 @@ var config Config
 
 // API for access to the API
 var API = api.ClientConfig()
-
-// Debug make true to log debug messages
-type Debug bool
-
-// Println a wrapper for debug.Println
-func (d Debug) Println(v ...interface{}) {
-	if d {
-		Log.Println(v...)
-	}
-}
-
-var debug Debug = false
 
 // Proxy contains the data for a proxy session.
 type Proxy struct {
@@ -98,6 +86,15 @@ func (p Proxy) close() {
 	p.apiConn.Close()
 }
 
+func skipHeaders(header string) bool {
+	for _, skip := range config.SkipHeaders {
+		if header == skip {
+			return true
+		}
+	}
+	return false
+}
+
 func (p Proxy) requestReader() {
 
 	// start off by reading the first line of the header
@@ -107,61 +104,43 @@ func (p Proxy) requestReader() {
 	p.method = meth
 	p.request = req
 	if !ok {
-		Log.Println("cannot parse request [" + p.clientConn.RemoteAddr().String() + "]")
+		log.Info("cannot parse request", p.clientConn.RemoteAddr().String())
 		p.close400()
 		return
 	}
-	debug.Println("Got request header:", header)
+	log.Debug("Got request header: "+header, p.clientConn.RemoteAddr().String())
 	p.apiConn.Write([]byte(header))
 	for {
 		header, err := p.clientReader.ReadString('\n')
 		if err != nil {
-			debug.Println("buffreadstring err", err)
+			log.Debug("buffreadstring err"+fmt.Sprint(err), p.clientConn.RemoteAddr().String())
+			p.close400()
 		}
 		key, value, ok := parseHeaderLine(header)
-		debug.Println("Copying header: ", key, value)
-		if !ok {
-			// we've finished the headers
+		log.Debug("Copying header: "+key+" "+value, p.clientConn.RemoteAddr().String())
+		if !ok { // we've finished the headers
 			break
 		}
 		if key == "Authorization" {
-			p.authToken = regexp.MustCompilePOSIX("Bearer ").ReplaceAllString(value, "")
-			debug.Println("Got auth token:", p.authToken)
+			p.authToken = value[len("Bearer "):]
+			log.Debug("Got auth token: "+p.authToken, p.clientConn.RemoteAddr().String())
+			continue
+		}
+		if skipHeaders(key) {
 			continue
 		}
 		if key == "Upgrade" {
 			p.upgrade = true
 		}
-		// strip headers
-		switch config.OperationMode {
-		case "serviceaccount": // Give the SA token
-			if key == "X-Remote-User" ||
-				key == "X-Remote-Group" {
-				continue
-			}
-		case "proxy":
-			if key == "X-Remote-User" ||
-				key == "X-Remote-Group" {
-				continue
-			}
-		default: //  "impersonate"
-			if key == "X-Remote-User" ||
-				key == "X-Remote-Group" ||
-				key == "Impersonate-User" ||
-				key == "Impersonate-Group" {
-				continue
-			}
-		}
 
-		debug.Println("Writing header: ", header)
+		log.Debug("Writing header: "+header, p.clientConn.RemoteAddr().String())
 		// we've filtered the headers
 		p.apiConn.Write([]byte(header))
 	}
 
 	if p.authToken == "" {
 		// todo fix no token
-		Log.Println("UNAUTHORIZED request [" + p.clientConn.RemoteAddr().String() + "] " + p.method + " " + p.request)
-		debug.Println("FAILED REQ ", "UNKNOWN", p.clientConn.RemoteAddr().String())
+		log.Info("UNAUTHORIZED request "+p.method+" "+p.request, p.clientConn.RemoteAddr().String())
 
 		p.close403("forbidden: User \\\"system:anonymous\\\" cannot get path \\\"" + p.request + "\\\"")
 		return
@@ -169,14 +148,14 @@ func (p Proxy) requestReader() {
 	//debug.Printf(" user token\n[%s]\n[%s]\n",t,token)
 	name := users.GetNameFromToken(p.authToken)
 	if !(len(name) > 0) {
-		Log.Println("UNAUTHORIZED request [" + p.clientConn.RemoteAddr().String() + "] " + p.method + " " + p.request)
-		debug.Println("FAILED REQ ", "UNKNOWN", p.clientConn.RemoteAddr().String())
+
+		log.Info("UNAUTHORIZED request "+p.method+" "+p.request, p.clientConn.RemoteAddr().String())
 
 		p.close403("forbidden: User \"system:anonymous\" cannot get path \"" + p.request + "\"")
 		return
 	}
 
-	debug.Println("operation mode auth headers:", config.OperationMode)
+	log.Debug("operation mode auth headers: "+config.OperationMode, p.clientConn.RemoteAddr().String())
 	// do authorization
 	switch config.OperationMode {
 	case "serviceaccount": // Give the SA token
@@ -184,11 +163,11 @@ func (p Proxy) requestReader() {
 	case "proxy":
 		// set appropriate headers
 		fmt.Fprintf(p.apiConn, "X-Remote-User: %s\r\n", name)
-		debug.Println("add username header:", name)
+		log.Debug("add username header: "+name, p.clientConn.RemoteAddr().String())
 		if users.GetUser(name).Groups != nil {
 			for _, group := range *users.GetUser(name).Groups {
 				fmt.Fprintf(p.apiConn, "X-Remote-Group: %s\r\n", group)
-				debug.Println("add group for un header:", name, group)
+				log.Debug("add group for un header: "+name+" "+group, p.clientConn.RemoteAddr().String())
 			}
 		}
 	default: //  "impersonate"
@@ -208,7 +187,7 @@ func (p Proxy) requestReader() {
 	}
 	fmt.Fprintf(p.apiConn, "\r\n")
 
-	Log.Println("request [" + p.clientConn.RemoteAddr().String() + "] " + p.method + " " + p.request)
+	log.Info("request "+p.method+" "+p.request, p.clientConn.RemoteAddr().String())
 
 	io.Copy(p.apiConn, p.clientReader)
 
@@ -226,13 +205,15 @@ func newProxyHandler(clientConn net.Conn) {
 	apiConn, err := tls.Dial("tcp", API.Dest, config.TLSConfig)
 	p.apiConn = apiConn
 	if err != nil {
-		Log.Println("Error connecting to API server:", err)
+		log.Info("Error connecting to API server:"+fmt.Sprint(err), p.clientConn.RemoteAddr().String())
+		// we really shouldn't 403 this but it'll do for now
+		p.close403("forbidden: User \"system:anonymous\" cannot connect to apiserver")
 		//http.Error(clientConn, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	p.apiReader = bufio.NewReader(apiConn)
 
-	debug.Println("Mixing the streams...")
+	log.Debug("Mixing the streams...", p.clientConn.RemoteAddr().String())
 
 	var wg sync.WaitGroup
 
@@ -273,14 +254,15 @@ func parseHeaderLine(line string) (key, value string, ok bool) {
 	return line[:s1], line[s1+2 : len(line)-2], true
 }
 
-// HTTPSServer listens on an sshnet https connection
-func HTTPSServer(c Config) *sshnet.Listener {
+// Server listens on an sshnet https connection
+func Server(c Config) *sshnet.Listener {
 
 	config = c
 
 	cert, err := tls.X509KeyPair([]byte(config.Certs.Cert), []byte(config.Certs.Key))
 	if err != nil {
-		log.Fatal(err)
+		log.Info("cannot decode proxy certificate"+fmt.Sprint(err), "server")
+		os.Exit(1)
 	}
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM([]byte(API.CA))
@@ -307,9 +289,9 @@ func HTTPSServer(c Config) *sshnet.Listener {
 		for {
 			clientConn, err := tlsListener.Accept()
 			if err != nil {
-				debug.Println("Failed to accept connection:", err)
+				log.Info("Failed to accept connection: "+fmt.Sprint(err), "server")
 			} else {
-				debug.Println("Accept connection:", clientConn.RemoteAddr())
+				log.Debug("Accept connection:", clientConn.RemoteAddr().String())
 				go newProxyHandler(clientConn)
 			}
 		}

@@ -5,13 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 
 	"github.com/adrianmoye/ssh-gateway/src/api"
+	"github.com/adrianmoye/ssh-gateway/src/log"
 )
 
 // TOKENLIFE the lifetime of proxy tokens we create
@@ -149,7 +149,7 @@ func WriteAPIToken(name string) string {
 
 	content, err := json.Marshal(encodedToken)
 	if err != nil {
-		log.Println(err)
+		log.Info(fmt.Sprint(err), "server")
 	}
 	return string(content)
 }
@@ -237,7 +237,7 @@ func CheckKey(name string, key ssh.PublicKey) bool {
 	var GenRes api.GenericHeader
 
 	API.Get(getQuery()+"/"+name, &GenRes)
-	log.Println("Querying user", getQuery()+"/"+name)
+	log.Info("user record "+getQuery()+"/"+name, "server")
 
 	if sshKey, ok := GenRes.Metadata.Annotations["ssh"]; ok {
 		if len(sshKey) > 0 {

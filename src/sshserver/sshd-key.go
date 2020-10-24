@@ -5,7 +5,10 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"log"
+	"fmt"
+	"os"
+
+	"github.com/adrianmoye/ssh-gateway/src/log"
 )
 
 // =======================
@@ -26,7 +29,8 @@ func GenKeys() Keys {
 	keys.BitSize = 4096
 	privateKey, err := generatePrivateKey(keys.BitSize)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Info("error generating keys: "+fmt.Sprint(err.Error()), "server")
+		os.Exit(1)
 	}
 
 	/*
@@ -57,7 +61,7 @@ func generatePrivateKey(bitSize int) (*rsa.PrivateKey, error) {
 		return nil, err
 	}
 
-	log.Println("Private Key generated")
+	log.Info("Private Key generated", "server")
 	return privateKey, nil
 }
 

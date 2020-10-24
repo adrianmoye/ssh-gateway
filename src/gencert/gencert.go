@@ -7,10 +7,13 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"log"
+	"fmt"
 	"math/big"
 	"net"
+	"os"
 	"time"
+
+	"github.com/adrianmoye/ssh-gateway/src/log"
 )
 
 // RawPEM just the raw bytes of the certs
@@ -19,6 +22,7 @@ type RawPEM struct {
 	Cert []byte
 }
 
+// GenCA generates a generic CA with the CN provided
 func GenCA(CN string) (OUT RawPEM) {
 	// set up our CA certificate
 	ca := &x509.Certificate{
@@ -39,14 +43,16 @@ func GenCA(CN string) (OUT RawPEM) {
 	// create our private and public key
 	caPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
-		log.Fatal(err)
+		log.Info(fmt.Sprint(err), "server")
+		os.Exit(1)
 		return
 	}
 
 	// create the CA
 	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
 	if err != nil {
-		log.Fatal(err)
+		log.Info(fmt.Sprint(err), "server")
+		os.Exit(1)
 		return
 	}
 
@@ -75,12 +81,14 @@ func DecodeCert(CA RawPEM) (cert *x509.Certificate, key *rsa.PrivateKey) {
 	block, _ := pem.Decode(CA.Cert)
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		log.Fatal(err)
+		log.Info(fmt.Sprint(err), "server")
+		os.Exit(1)
 	}
 	block, _ = pem.Decode(CA.Key)
 	key, err = x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
-		log.Fatal(err)
+		log.Info(fmt.Sprint(err), "server")
+		os.Exit(1)
 	}
 
 	return
@@ -110,14 +118,14 @@ func SignedCert(CN string, CA RawPEM) (OUT RawPEM) {
 
 	certPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
-		log.Fatal(err)
-		return
+		log.Info(fmt.Sprint(err), "server")
+		os.Exit(1)
 	}
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, cert, CACert, &certPrivKey.PublicKey, CAKey)
 	if err != nil {
-		log.Fatal("Generating cert: ", err)
-		return
+		log.Info(fmt.Sprint(err), "server")
+		os.Exit(1)
 	}
 
 	certPEM := new(bytes.Buffer)
@@ -134,7 +142,7 @@ func SignedCert(CN string, CA RawPEM) (OUT RawPEM) {
 
 	OUT.Cert = certPEM.Bytes()
 	OUT.Key = certPrivKeyPEM.Bytes()
-	log.Printf("Generated server certs/keys\n")
+	log.Info("Generated server certs/keys", "server")
 
 	return OUT
 }

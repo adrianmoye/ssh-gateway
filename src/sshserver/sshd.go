@@ -2,10 +2,11 @@ package sshserver
 
 import (
 	"fmt"
-	"log"
 	"net"
+	"os"
 	"regexp"
 
+	"github.com/adrianmoye/ssh-gateway/src/log"
 	"github.com/adrianmoye/ssh-gateway/src/sshnet"
 	"github.com/adrianmoye/ssh-gateway/src/users"
 
@@ -78,26 +79,27 @@ func newMetrics() (ret Metrics) {
 
 var met Metrics = newMetrics()
 
-// SSHServer the ssh server main listener
-func SSHServer(c Config) {
+// Server the ssh server main listener
+func Server(c Config) {
 	config = c
 
 	// Listen for the raw tcp connections
 	listener, err := net.Listen("tcp", "0.0.0.0:"+config.Port)
 	if err != nil {
-		log.Fatalf("Failed to listen on %s (%s)", config.Port, err)
+		log.Info("Failed to listen on "+config.Port+" "+fmt.Sprint(err), "server")
+		os.Exit(1)
 	}
 	go listen(listener)
 }
 
 func listen(l net.Listener) {
 	// Accept all connections
-	log.Printf("Listening on port [%s]...", config.Port)
+	log.Info("Listening on port ["+config.Port+"]...", "server")
 	for {
 		tcpConn, err := l.Accept()
 		met.Accept.Add(1)
 		if err != nil {
-			log.Printf("Failed to accept incoming connection (%s)", err)
+			log.Info("Failed to accept incoming connection ("+fmt.Sprint(err)+")", "server")
 			continue
 		}
 
@@ -114,7 +116,7 @@ func GenSSHServerConfig(privateBytes []byte) *ssh.ServerConfig {
 		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 
 			if users.CheckKey(conn.User(), key) {
-				log.Printf("new connection: [%s@%s]", conn.User(), conn.RemoteAddr())
+				log.Info("new connection", conn.User()+"@"+conn.RemoteAddr().String())
 				met.LoginSuccess.Add(1)
 				return &ssh.Permissions{
 					CriticalOptions: map[string]string{
@@ -124,7 +126,7 @@ func GenSSHServerConfig(privateBytes []byte) *ssh.ServerConfig {
 				}, nil
 			}
 
-			log.Printf("Failed Login: [%s](%s)", conn.User(), conn.RemoteAddr())
+			log.Info("Failed Login:", conn.User()+"@"+conn.RemoteAddr().String())
 			met.LoginFail.Add(1)
 			return nil, fmt.Errorf("unknown public key")
 
@@ -135,7 +137,8 @@ func GenSSHServerConfig(privateBytes []byte) *ssh.ServerConfig {
 
 	private, err := ssh.ParsePrivateKey(privateBytes)
 	if err != nil {
-		log.Fatal("Failed to parse private key")
+		log.Info("Failed to parse private key", "server")
+		os.Exit(1)
 	}
 
 	config.AddHostKey(private)
@@ -146,7 +149,7 @@ func GenSSHServerConfig(privateBytes []byte) *ssh.ServerConfig {
 func handleSSHUpgrade(tcpConn net.Conn) {
 	client, chans, reqs, err := ssh.NewServerConn(tcpConn, config.ServerConfig)
 	if err != nil {
-		log.Printf("Failed to handshake (%s)", err)
+		log.Info("Failed to handshake "+fmt.Sprint(err), client.User()+"@"+client.RemoteAddr().String())
 		return
 	}
 	// Discard all global out-of-band Requests
@@ -168,7 +171,7 @@ func handleChannels(client *ssh.ServerConn, chans <-chan ssh.NewChannel) {
 			go handleDirectTcpip(client, newChannel)
 
 		default:
-			log.Printf("unknown new channel [%s]\n", t)
+			log.Info("unknown new channel ["+fmt.Sprint((t))+"]\n", client.User()+"@"+client.RemoteAddr().String())
 			newChannel.Reject(ssh.UnknownChannelType, fmt.Sprintf("ERROR: unsupported channel type: %s", t))
 		}
 	}
@@ -186,7 +189,7 @@ func handleDirectTcpip(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 	   we'll just forward it to the api server anyway */
 	connection, requests, err := sshChan.Accept()
 	if err != nil {
-		log.Printf("Could not accept channel (%s)", err)
+		log.Info("Could not accept channel ("+fmt.Sprint(err)+")", client.User()+"@"+client.RemoteAddr().String())
 		return
 	}
 	go ssh.DiscardRequests(requests)
@@ -210,20 +213,21 @@ func handleDirectTcpip(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 	connection, requests, err := sshChan.Accept()
 	if err != nil {
-		log.Printf("Could not accept channel (%s)", err)
+		log.Info("Could not accept channel ("+fmt.Sprint(err)+")", client.User()+"@"+client.RemoteAddr().String())
+
 		return
 	}
 
 	help := regexp.MustCompilePOSIX("\\n").ReplaceAllString(helpTextTexplate, "\r\n")
 	name := client.Permissions.CriticalOptions["name"]
-	idString := "[" + name + "@" + client.RemoteAddr().String() + "]"
+	idString := name + "@" + client.RemoteAddr().String()
 
 	for req := range requests {
 		switch req.Type {
 		case "pty-req":
 		case "env":
 		case "shell":
-			log.Println("help", idString)
+			log.Info("help", idString)
 			if len(req.Payload) == 0 {
 				req.Reply(true, nil)
 			} else {
@@ -238,16 +242,16 @@ func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 			cmd := string(req.Payload[4:])
 			switch cmd {
 			case "plugin":
-				log.Println("plugin", idString)
+				log.Info("plugin", idString)
 				fmt.Fprintf(connection, "%s", PLUGIN)
 			case "token":
-				log.Println("token", idString)
+				log.Info("token", idString)
 				fmt.Fprintf(connection, users.WriteAPIToken(name))
 			case "login":
-				log.Println("login", idString)
+				log.Info("login", idString)
 				fmt.Fprintf(connection, "%s %s %s %s\n", name, "kubernetes.default:443", "kubernetes.default", config.ProxyCA)
 			default:
-				log.Println("default help", idString)
+				log.Info("default help", idString)
 				fmt.Fprintf(connection, help)
 			}
 
@@ -256,7 +260,7 @@ func handleSession(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 			if req.WantReply {
 				req.Reply(true, nil)
 			}
-			log.Printf("unknown request %s [%s][%s]", idString, req.Type, string(req.Payload))
+			log.Info("unknown request ["+req.Type+"]["+string(req.Payload)+"]", idString)
 		}
 
 	}

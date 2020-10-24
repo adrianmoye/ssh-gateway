@@ -27,7 +27,7 @@ type gwConfig struct {
 	SecretName    string
 	ResourceType  string
 	APIGroup      string
-	CopyHeaders   []string
+	SkipHeaders   []string
 	Listener      *sshnet.Listener
 }
 
@@ -121,11 +121,11 @@ func setupConfig() gwConfig {
 
 	switch config.OperationMode {
 	case "serviceaccount":
-		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "Impersonate-Group", "Impersonate-User", "TransferEncoding", "Transfer-Encoding", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
+		config.SkipHeaders = []string{"X-Remote-User", "X-Remote-Group"}
 	case "proxy":
-		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "Impersonate-Group", "Impersonate-User", "TransferEncoding", "Transfer-Encoding", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
+		config.SkipHeaders = []string{"X-Remote-User", "X-Remote-Group"}
 	default: //  "impersonate"
-		config.CopyHeaders = []string{"Accept", "Accept-Encoding", "Connection", "Content-Length", "Content-Type", "TransferEncoding", "Transfer-Encoding", "User-Agent", "X-Stream-Protocol-Version", "Upgrade"}
+		config.SkipHeaders = []string{"X-Remote-User", "X-Remote-Group", "Impersonate-User", "Impersonate-Group"}
 	}
 
 	return config

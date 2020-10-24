@@ -12,7 +12,11 @@ replicaCount: 1
 #secretName: ssh-gateway-config
 
 # The type of the resource
-#resourceType: serviceaccount
+resourceType: serviceaccount
+
+userCRD:
+  create: false
+  apiGroup: "example.com"
 
 image:
   repository: adrianmoye/ssh-gateway
