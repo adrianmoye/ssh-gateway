@@ -23,20 +23,14 @@ const TOKENREFRESH = 10 * time.Minute
 // ResourceType the type of resource to search for
 var ResourceType = ""
 
+// OperationMode the mode of operation
+var OperationMode = ""
+
 // resourceQuery the value of the resource to search for
 var resourceQuery = ""
 
 // API api client object
 var API = api.ClientConfig()
-
-// Config users helpers config
-type Config struct {
-	OperationMode string
-	APIGroup      string
-	ResourceType  string
-}
-
-var config Config
 
 // APIToken structured format for JSON api token
 type APIToken struct {
@@ -106,19 +100,26 @@ func GetToken(name string) string {
 		tokens[users[name].Token.Value] = name
 	}
 
-	if config.OperationMode == "serviceaccount" {
+	if OperationMode == "serviceaccounts" {
 		var SA api.Serviceaccount
 
 		var secret api.Secret
-		API.Get("/api/v1/namespaces/"+API.Namespace+"/"+config.ResourceType+"/"+name, &SA)
+		API.Get("/api/v1/namespaces/"+API.Namespace+"/"+ResourceType+"/"+name, &SA)
 		API.Get(fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", API.Namespace, SA.Secrets[0].Name), &secret)
 		saToken, _ := base64.StdEncoding.DecodeString(secret.Data["token"])
 		SATokens[name] = "Bearer " + string(saToken)
+
+		log.Debug(fmt.Sprintf("Got token for [%s][%s]", name, SATokens[name]), "server")
 	}
 
 	GetGroups(name)
 
 	return users[name].Token.Value
+}
+
+// GetSAToken returns an auth token for a user
+func GetSAToken(name string) string {
+	return SATokens[name]
 }
 
 // GetNameFromToken returns a username for an unexpired token

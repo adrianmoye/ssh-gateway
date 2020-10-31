@@ -158,9 +158,14 @@ func (p Proxy) requestReader() {
 	log.Debug("operation mode auth headers: "+config.OperationMode, p.clientConn.RemoteAddr().String())
 	// do authorization
 	switch config.OperationMode {
-	case "serviceaccount": // Give the SA token
-		fmt.Fprintf(p.apiConn, "Authorization: %s\r\n", users.SATokens[name])
+	case "serviceaccounts": // Give the SA token
+		fmt.Fprintf(p.apiConn, "Authorization: %s\r\n", users.GetSAToken(name))
+
+		log.Debug("serviceaccount header :"+fmt.Sprintf("Authorization: %s\r\n", users.GetSAToken(name)), p.clientConn.RemoteAddr().String())
+
 	case "proxy":
+
+		log.Debug("proxy header..", p.clientConn.RemoteAddr().String())
 		// set appropriate headers
 		fmt.Fprintf(p.apiConn, "X-Remote-User: %s\r\n", name)
 		log.Debug("add username header: "+name, p.clientConn.RemoteAddr().String())
@@ -171,7 +176,9 @@ func (p Proxy) requestReader() {
 			}
 		}
 	default: //  "impersonate"
-		fmt.Fprintf(p.apiConn, "Authorization: Bearer %s\r\n", API.Bearer)
+
+		log.Debug("impersonate header:"+fmt.Sprintf("Authorization: %s\r\n", API.Bearer), p.clientConn.RemoteAddr().String())
+		fmt.Fprintf(p.apiConn, "Authorization: %s\r\n", API.Bearer)
 		fmt.Fprintf(p.apiConn, "Impersonate-User: %s\r\n", name)
 		if users.GetUser(name).Groups != nil {
 			for _, group := range *users.GetUser(name).Groups {
@@ -217,22 +224,21 @@ func newProxyHandler(clientConn net.Conn) {
 
 	var wg sync.WaitGroup
 
-	go func(wg *sync.WaitGroup) {
-		wg.Add(1)
-		defer wg.Done()
+	go func(w *sync.WaitGroup) {
+		w.Add(1)
+		defer w.Done()
 		p.requestReader()
 	}(&wg)
-	go func(wg *sync.WaitGroup) {
-		wg.Add(1)
-		defer wg.Done()
+	go func(w *sync.WaitGroup) {
+		w.Add(1)
+		defer w.Done()
 		p.responseReader()
 	}(&wg)
 
 	wg.Wait()
 
 	//Log.Println("closing...")
-	//clientConn.Close()
-	//apiConn.Close()
+	//p.close()
 }
 
 // from golang/request.go

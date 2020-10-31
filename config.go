@@ -5,12 +5,13 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"flag"
-	"log"
+	"fmt"
 
 	"golang.org/x/crypto/ssh"
 
 	"github.com/adrianmoye/ssh-gateway/src/api"
 	"github.com/adrianmoye/ssh-gateway/src/gencert"
+	"github.com/adrianmoye/ssh-gateway/src/log"
 	"github.com/adrianmoye/ssh-gateway/src/sshnet"
 	"github.com/adrianmoye/ssh-gateway/src/sshserver"
 	"github.com/adrianmoye/ssh-gateway/src/users"
@@ -26,7 +27,6 @@ type gwConfig struct {
 	OperationMode string
 	SecretName    string
 	ResourceType  string
-	APIGroup      string
 	SkipHeaders   []string
 	Listener      *sshnet.Listener
 }
@@ -38,15 +38,14 @@ func setupConfig() gwConfig {
 	flagConfigSecret := flag.String("config", "ssh-gateway-config", "Config Secret Name")
 	flagOperatingMode := flag.String("mode", "impersonate", "Operating mode (serviceaccount|proxy|impersonate)")
 	flagResourceType := flag.String("resource", "serviceaccounts", "Resource type for user records")
-	flagAPIGroup := flag.String("apigroup", "/v1", "The api group to use, for crds you should start it \"s/example.com/v1\"")
 	flag.Parse()
 
 	config.Port = *flagPort
 	config.OperationMode = *flagOperatingMode
 	config.SecretName = *flagConfigSecret
 	config.ResourceType = *flagResourceType
-	config.APIGroup = *flagAPIGroup
 	users.ResourceType = config.ResourceType
+	users.OperationMode = config.OperationMode
 
 	config.API = api.ClientConfig()
 
@@ -65,7 +64,7 @@ func setupConfig() gwConfig {
 
 	var CA gencert.RawPEM
 	if _, ok := secret.Data["ca_cert"]; !ok {
-		log.Println("Regenerating CA Cert")
+		log.Info("Regenerating CA Cert", "server")
 		CA = gencert.GenCA("SSH Gateway CA")
 		//log.Println(string(CA.Cert))
 		//log.Println(string(CA.Key))
@@ -75,11 +74,11 @@ func setupConfig() gwConfig {
 	config.ProxyCA = secret.Data["ca_cert"]
 	c, err := base64.StdEncoding.DecodeString(secret.Data["ca_cert"])
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(fmt.Sprint(err), "server")
 	}
 	k, err := base64.StdEncoding.DecodeString(secret.Data["ca_key"])
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(fmt.Sprint(err), "server")
 	}
 	CA.Cert, CA.Key = c, k
 	config.ProxyCert = gencert.SignedCert("kubernetes.default", CA)
@@ -91,7 +90,7 @@ func setupConfig() gwConfig {
 		secret.Metadata.Namespace = config.API.Namespace
 		secret.Metadata.Labels = make(map[string]string)
 		config.API.Post("/api/v1/namespaces/"+config.API.Namespace+"/secrets", &secret)
-		log.Printf("Created secret with keys: [%s]\n", config.SecretName)
+		log.Info("Created secret with keys: ["+config.SecretName+"]", "server")
 	}
 
 	// now we have the server cert
@@ -101,7 +100,7 @@ func setupConfig() gwConfig {
 	//log.Println("keycert:", ProxyCert)
 	cert, err := tls.X509KeyPair(config.ProxyCert.Cert, config.ProxyCert.Key)
 	if err != nil {
-		log.Panic(err)
+		log.Panic(fmt.Sprint(err), "server")
 	}
 
 	//log.Println("keycert past fatal:", ProxyCert)

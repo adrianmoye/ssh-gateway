@@ -90,6 +90,7 @@ type Addr struct {
 
 // Conn sshnet Conn type, wraps an ssh connection/channel in a net.Conn compatible interface
 type Conn struct {
+	closed        bool
 	in            chan []byte
 	out           chan []byte
 	readNextChunk []byte
@@ -230,6 +231,9 @@ func (c *Conn) Read(retBuf []byte) (int, error) {
 func (c *Conn) Write(b []byte) (int, error) {
 
 	debug.Println("Write called")
+	if c.closed {
+		return 0, net.ErrWriteToConnected
+	}
 	c.writer.Timeout()
 	buff := make([]byte, len(b))
 	copy(buff, b)
@@ -255,6 +259,7 @@ func (c *Conn) Close() error {
 	if c.out != nil {
 		close(c.out)
 	}
+	c.closed = true
 	c.client.Close()
 	return nil
 }
@@ -386,7 +391,7 @@ func Listen(addr string) (*Listener, error) {
 	listener := &Listener{}
 	listener.closed = false
 	listener.addr.addr = addr
-	listener.connQueue = make(chan *Conn)
+	listener.connQueue = make(chan *Conn, 25) // probably helps with latency?
 
 	debug.Println(len(listener.connQueue), cap(listener.connQueue))
 
@@ -425,6 +430,7 @@ func (l *Listener) Addr() net.Addr {
 // Dialer connects an ssh channel for a connection to the listener
 func (l *Listener) Dialer(sshConn *ssh.ServerConn, client ssh.Channel) {
 	conn := NewConn(sshConn, client)
+	conn.closed = false
 	debug.Println("doing put connection on listen queue")
 	debug.Println(len(l.connQueue), cap(l.connQueue))
 	l.connQueue <- &conn

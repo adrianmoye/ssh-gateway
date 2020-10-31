@@ -3,6 +3,7 @@ package log
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -18,12 +19,16 @@ type entry struct {
 type Levels int
 
 const (
-	info Levels = iota
+	l_panic Levels = iota
+	fatal
+	info
 	debug
 )
 
 var (
 	levelStr []string = []string{
+		"panic",
+		"fatal",
 		"info",
 		"debug",
 	}
@@ -57,4 +62,16 @@ func Info(message string, address string) {
 // Debug logs at debug level
 func Debug(message string, address string) {
 	Println(debug, message, address)
+}
+
+// Info logs at info level
+func Fatal(message string, address string) {
+	Println(fatal, message, address)
+	os.Exit(1)
+}
+
+// Info logs at info level
+func Panic(message string, address string) {
+	Println(l_panic, message, address)
+	panic(message)
 }

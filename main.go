@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/adrianmoye/ssh-gateway/src/log"
 	"github.com/adrianmoye/ssh-gateway/src/proxy"
 	"github.com/adrianmoye/ssh-gateway/src/sshserver"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 /*

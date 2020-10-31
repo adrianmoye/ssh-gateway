@@ -1,3 +1,4 @@
+{{ if .Values.mode }}
 {{- if eq .Values.mode "impersonate" -}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -13,4 +14,4 @@ subjects:
 - kind: ServiceAccount
   name: {{ include "ssh-gateway.serviceAccountName" . }}
   namespace: {{ .Release.Namespace }}
-{{- end }}
+{{- end }}{{ end }}

@@ -6,25 +6,25 @@ metadata:
   labels:
     {{- include "ssh-gateway.labels" . | nindent 4 }}
 rules:
-{{ $mode := .Values.mode | default "impersonate" }}
-{{ if eq $mode "serviceaccount" }}
+{{ $mode := default "impersonate" .Values.mode }}
+{{ if eq $mode "serviceaccounts" }}
 - apiGroups: [""]
   resources: ["serviceaccounts"]
-  verbs: ["get", "list"]
+  verbs: ["get"]
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get"]
 {{ else }}{{ if eq $mode "proxy" }}
 - apiGroups: [""]
-  resources: [ "{{ .Values.resourceType | default "serviceaccount" }}" ]
+  resources: [ "{{ default "serviceaccounts" .Values.resourceType }}" ]
   verbs: ["get"]
 {{ else }}
 - apiGroups: [""]
-  resources: [ "{{ .Values.resourceType | default "serviceaccount" }}" ]
+  resources: [ "{{ default "serviceaccounts"  .Values.resourceType }}" ]
   verbs: ["get"]
 {{ end }}
 - apiGroups: [""]
   resources: ["secrets"]
-  resourceNames: [ "{{ .Values.secretName | default "" }}" ]
+  resourceNames: [ "{{ default (include "ssh-gateway.fullname" .) .Values.secretName }}" ]
   verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
 {{- end }}

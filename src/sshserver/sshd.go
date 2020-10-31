@@ -149,7 +149,9 @@ func GenSSHServerConfig(privateBytes []byte) *ssh.ServerConfig {
 func handleSSHUpgrade(tcpConn net.Conn) {
 	client, chans, reqs, err := ssh.NewServerConn(tcpConn, config.ServerConfig)
 	if err != nil {
-		log.Info("Failed to handshake "+fmt.Sprint(err), client.User()+"@"+client.RemoteAddr().String())
+		// bug, already lost client.user/addr, it crashes out
+		//log.Info("Failed to handshake "+fmt.Sprint(err), client.User()+"@"+client.RemoteAddr().String())
+		//log.Info("Failed to handshake "+fmt.Sprint(err), "server")
 		return
 	}
 	// Discard all global out-of-band Requests
@@ -198,6 +200,8 @@ func handleDirectTcpip(client *ssh.ServerConn, sshChan ssh.NewChannel) {
 	// and pass through the ssh channel as though
 	// it was a network connection.
 	config.Listener.Dialer(client, connection)
+
+	//connection.CloseWrite().Error()
 
 }
 
